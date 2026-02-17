@@ -1,10 +1,5 @@
 # R/0.1_mod_energy_items.R
 # ------------------------------------------------------------------
-# Graphique "FoodEnergy per capita — détail par Item" (stacked bar)
-# + Vue détaillée sous forme :
-#    - soit camemberts des parts d'énergie par produit
-#    - soit camemberts des parts d'apport protéique (module R/16)
-# ------------------------------------------------------------------
 
 mod_energy_items_ui <- function(id){
   ns <- NS(id)
@@ -62,10 +57,12 @@ mod_energy_items_server <- function(
       div(
         class = "card",
         div(
+          h2("Breakdown of food availability by diet"),
           class = "card-body",
+          
           div(
             class = "u-row diet-cards",
-            
+            tags$br(),
             div(
               class = "u-card u-card--flat diet-card",
               div(class = "diet-card-title", "Same diet"),
@@ -82,7 +79,7 @@ mod_energy_items_server <- function(
                 class = "diet-card-text",
                 "This normative diet represents a desirable pathway (nutrition, diversification) promoted by international agencies for population health and sustainable food systems. It is inspired by FAO/WHO recommendations and the Agrimonde/Lancet work."
               )
-                ),
+            ),
             
             div(
               class = "u-card u-card--flat diet-card",
@@ -113,16 +110,19 @@ mod_energy_items_server <- function(
           
           conditionalPanel(
             condition = sprintf("input['%s'] == 'energy'", ns("view_mode")),
-            plotly::plotlyOutput(ns("pie_energy_items"), height = "370px")
+            plotly::plotlyOutput(ns("pie_energy_items"), height = "450px")
           ),
+          
           conditionalPanel(
             condition = sprintf("input['%s'] == 'protein'", ns("view_mode")),
-            uiOutput(ns("protein_plot"))
+            plotly::plotlyOutput(ns("pie_protein_items"), height = "4500px")
           ),
+          
           div(
             class = "u-actions",
             downloadLink(ns("dl_plot"), label = tagList(icon("download"), "CSV"))
           ),
+          
           tags$br(),
           uiOutput(ns("note"))
         )
@@ -138,17 +138,21 @@ mod_energy_items_server <- function(
           stringr::str_trim(Element) == ENERGY_ELEMENT,
           Scenario %in% SCEN_SHOW
         ) %>%
+        dplyr::mutate(
+          Scenario = as.character(Scenario),
+          Scenario = factor(Scenario, levels = SCEN_SHOW)   # <<< au lieu de fct_relevel
+        ) %>%
         dplyr::group_by(Scenario) %>%
         dplyr::summarise(
           year_used = suppressWarnings(max(Year[!is.na(Value)], na.rm = TRUE)),
           .groups   = "drop"
         ) %>%
         dplyr::filter(is.finite(year_used)) %>%
-        dplyr::mutate(Scenario = forcats::fct_relevel(Scenario, SCEN_SHOW)) %>%
         dplyr::arrange(Scenario)
     }) %>% bindCache(r_country(), ENERGY_ELEMENT, SCEN_SHOW_KEY)
     
-    # données items ----------------------------------------------------------
+    
+    # données items (énergie) ------------------------------------------------
     data_items <- reactive({
       req(!is.null(r_items()), length(r_items()) > 0)
       yrs <- years_by_scenario()
@@ -182,9 +186,9 @@ mod_energy_items_server <- function(
           value    = dplyr::coalesce(value, 0),
           unit     = dplyr::coalesce(unit, ylab),
           year     = dplyr::coalesce(year, year_used),
-          Scenario = forcats::fct_relevel(Scenario, SCEN_SHOW),
+          Scenario = forcats::fct_relevel(as.character(Scenario), SCEN_SHOW),
           
-          # UI scenario (labels) while keeping Scenario as code for joins
+          # UI labels
           Scenario_ui = factor(
             label_scen(as.character(Scenario)),
             levels = SCEN_SHOW_UI_LEVELS
@@ -263,6 +267,7 @@ mod_energy_items_server <- function(
     })
     
     # --- camemberts par scénario (vue énergie) ------------------------------
+    # --- camemberts par scénario (vue énergie) ------------------------------
     output$pie_energy_items <- plotly::renderPlotly({
       req(input$view_mode == "energy")
       validate(need(length(SCEN_SHOW) == 3, "SCENARIOS_BASE_CODES doit contenir exactement 3 scénarios pour ce module."))
@@ -282,6 +287,7 @@ mod_energy_items_server <- function(
       names(cols) <- levels(pd$Item)
       
       df_share <- pd %>%
+        dplyr::mutate(Scenario = as.character(Scenario)) %>%  # sécurité
         dplyr::group_by(Scenario) %>%
         dplyr::mutate(
           total = sum(value, na.rm = TRUE),
@@ -293,7 +299,11 @@ mod_energy_items_server <- function(
           ),
           text_pos = dplyr::if_else(share < 0.05, "outside", "inside")
         ) %>%
-        dplyr::ungroup()
+        dplyr::ungroup() %>%
+        # >>> pas de tranches < 1%
+        dplyr::filter(!is.na(share), share >= 0.01)
+      
+      validate(need(nrow(df_share) > 0, "No energy shares ≥ 1% to display."))
       
       x_domains <- list(
         c(0.00, 1/3),
@@ -304,10 +314,12 @@ mod_energy_items_server <- function(
       p <- plotly::plot_ly()
       
       for(i in seq_along(SCEN_SHOW)){
-        sc_code <- SCEN_SHOW[i]
+        sc_code <- as.character(SCEN_SHOW[i])
         sc_lab  <- label_scen(sc_code)
         
-        d  <- df_share %>% dplyr::filter(Scenario == sc_code, total > 0, value > 0)
+        d <- df_share %>%
+          dplyr::filter(Scenario == sc_code, total > 0, value > 0)
+        
         if (nrow(d) == 0) next
         
         p <- p %>%
@@ -332,90 +344,283 @@ mod_energy_items_server <- function(
               "Valeur : %{customdata} ", ylab,
               "<extra></extra>"
             ),
-            showlegend = (i == 1)
+            # >>> pas de légende
+            showlegend = FALSE
           )
       }
       
-      p %>%
+      p <- p %>%
         plotly::layout(
-          margin        = list(t = 45, b = 60, l = 70, r = 200),
+          # >>> pas de légende + marges adaptées
+          showlegend    = FALSE,
+          margin        = list(t = 45, b = 120, l = 70, r = 40),
           paper_bgcolor = APP_TRANSPARENT,
           plot_bgcolor  = APP_TRANSPARENT,
           font = list(color = th$font_color),
           hoverlabel = list(
             bgcolor = th$hover_bg,
             font    = list(color = th$hover_font)
-          ),
-          legend = list(
-            orientation = "h",
-            x = 0.5,
-            xanchor = "center",
-            y = 1.15,
-            font = list(color = th$muted_color)
           )
         ) %>%
         plotly::config(displaylogo = FALSE)
+      
+      p <- plotly_apply_global_theme(p, bg = "transparent", grid = "none")
+      if (!is.null(p$x$layout$shapes)) p$x$layout$shapes <- NULL
+      p
     })
     
-    # --- Graphique protéines (module R/16) ----------------------------------
-    output$protein_plot <- renderUI({
-      ns <- session$ns
-      if (input$view_mode == "protein") {
-        mod_protein_treemap_ui(ns("protein_treemap"))
+    
+    # --- camemberts par scénario (vue protéines) ----------------------------
+    output$pie_protein_items <- plotly::renderPlotly({
+      req(input$view_mode == "protein")
+      
+      PROT_ELEMENT <- "Protein consumption per capita"
+      th <- get_plotly_tokens()
+      
+      # années par scénario (protéines) — sans warning même si un scénario manque
+      yrs_prot <- fact %>%
+        dplyr::filter(
+          Region == r_country(),
+          stringr::str_trim(Element) == PROT_ELEMENT,
+          Scenario %in% SCEN_SHOW
+        ) %>%
+        dplyr::mutate(
+          Scenario = as.character(Scenario),
+          Scenario = factor(Scenario, levels = SCEN_SHOW)     # <<< au lieu de fct_relevel
+        ) %>%
+        dplyr::group_by(Scenario) %>%
+        dplyr::summarise(
+          year_used = suppressWarnings(max(Year[!is.na(Value)], na.rm = TRUE)),
+          .groups   = "drop"
+        ) %>%
+        dplyr::filter(is.finite(year_used)) %>%
+        dplyr::arrange(Scenario)
+      
+      
+      validate(need(nrow(yrs_prot) >= 2, "Not enough protein data to display pies."))
+      
+      # données protéines
+      pd <- fact %>%
+        dplyr::inner_join(yrs_prot, by = "Scenario") %>%
+        dplyr::filter(
+          Region == r_country(),
+          stringr::str_trim(Element) == PROT_ELEMENT,
+          Year == year_used,
+          Item %in% r_items()
+        ) %>%
+        dplyr::group_by(Scenario, Item) %>%
+        dplyr::summarise(value = sum(Value, na.rm = TRUE), .groups = "drop")
+      
+      validate(need(nrow(pd) > 0 && sum(pd$value, na.rm = TRUE) > 0,
+                    "No non-zero protein values to display."))
+      
+      df_share <- pd %>%
+        dplyr::mutate(Scenario = as.character(Scenario)) %>%
+        dplyr::group_by(Scenario) %>%
+        dplyr::mutate(
+          total = sum(value, na.rm = TRUE),
+          share = dplyr::if_else(total > 0, value / total, NA_real_),
+          label_pct = dplyr::if_else(
+            !is.na(share) & total > 0,
+            scales::percent(share, accuracy = 1),
+            NA_character_
+          ),
+          text_pos = dplyr::if_else(share < 0.05, "outside", "inside")
+        ) %>%
+        dplyr::ungroup() %>%
+        # >>> pas de tranches < 1%
+        dplyr::filter(!is.na(share), share >= 0.01)
+      
+      validate(need(nrow(df_share) > 0, "No protein shares ≥ 1% to display."))
+      
+      df_share <- df_share %>%
+        dplyr::mutate(Item = forcats::fct_relevel(Item, sort(unique(Item))))
+      
+      cols <- if (exists("item_colors_for"))
+        item_colors_for(levels(df_share$Item))
+      else
+        scales::hue_pal()(length(levels(df_share$Item)))
+      names(cols) <- levels(df_share$Item)
+      
+      # scénarios réellement présents après filtre 1%
+      scen_avail <- df_share %>%
+        dplyr::distinct(Scenario) %>%
+        dplyr::pull(Scenario) %>%
+        as.character()
+      
+      validate(need(length(scen_avail) >= 2, "Not enough protein scenarios after filtering < 1%."))
+      
+      nS <- length(scen_avail)
+      
+      x_domains <- if (nS == 2) {
+        list(c(0.00, 0.50), c(0.50, 1.00))
+      } else {
+        list(c(0.00, 1/3), c(1/3, 2/3), c(2/3, 1.00))
       }
+      
+      p <- plotly::plot_ly()
+      
+      for(i in seq_along(scen_avail)){
+        sc_code <- scen_avail[i]
+        sc_lab  <- label_scen(sc_code)
+        
+        d <- df_share %>% dplyr::filter(Scenario == sc_code, total > 0, value > 0)
+        if (nrow(d) == 0) next
+        
+        p <- p %>%
+          plotly::add_pie(
+            data   = d,
+            labels = ~Item,
+            values = ~share,
+            text   = ~label_pct,
+            textinfo = "text",
+            name   = sc_lab,
+            domain = list(x = x_domains[[i]], y = c(0, 1)),
+            sort   = FALSE,
+            textposition = ~text_pos,
+            # >>> demandé : % en blanc
+            textfont     = list(color = "white", size = 12),
+            insidetextorientation = "horizontal",
+            marker       = list(colors = cols[d$Item]),
+            hovertemplate = paste0(
+              "<b>", sc_lab, "</b><br>",
+              "%{label}<br>",
+              "Share: %{percent}<extra></extra>"
+            ),
+            # >>> pas de légende
+            showlegend = FALSE
+          )
+      }
+      
+      # labels sous les pies (plus bas)
+      xs <- (seq_len(nS) - 0.5) / nS
+      ann <- lapply(seq_len(nS), function(i){
+        list(
+          x = xs[i],
+          y = -0.20,  # <<< plus bas
+          text = label_scen(scen_avail[i]),
+          showarrow = FALSE,
+          font = list(size = 16, color = "white")
+        )
+      })
+      
+      p <- p %>%
+        plotly::layout(
+          annotations = ann,
+          showlegend    = FALSE,
+          margin        = list(t = 45, b = 140, l = 70, r = 40),
+          paper_bgcolor = APP_TRANSPARENT,
+          plot_bgcolor  = APP_TRANSPARENT,
+          font = list(color = th$font_color),
+          hoverlabel = list(
+            bgcolor = th$hover_bg,
+            font    = list(color = th$hover_font)
+          )
+        ) %>%
+        plotly::config(displaylogo = FALSE)
+      
+      p <- plotly_apply_global_theme(p, bg = "transparent", grid = "none")
+      if (!is.null(p$x$layout$shapes)) p$x$layout$shapes <- NULL
+      p
     })
     
-    mod_protein_treemap_server(
-      id        = "protein_treemap",
-      fact      = fact,
-      r_country = r_country
-    )
-    
-    # --- export CSV commun (énergie + protéines) ---------------------------
+    # --- export CSV commun (énergie + protéines) ----------------------------
     output$dl_plot <- downloadHandler(
       filename = function(){
         paste0("Nutrition_", gsub(" ", "_", r_country()), "_data.csv")
       },
       content = function(file){
+        
+        # ====== ÉNERGIE =====================================================
         pd_energy <- data_items()
         ylab <- unique(pd_energy$.ylab)[1]
+        
         energy_df <- pd_energy %>%
           dplyr::transmute(
-            Pays = r_country(),
-            Scenario = as.character(Scenario),         # codes
-            Scenario_label = as.character(Scenario_ui),# labels (new config)
-            Annee = year,
-            Item, Valeur = value, Unite = ylab
+            Pays           = r_country(),
+            Scenario       = as.character(Scenario),           # code
+            Scenario_label = as.character(Scenario_ui),        # label
+            Annee          = year,
+            Item           = Item,
+            Valeur         = value,
+            Unite          = ylab,
+            Type           = "energy"
           )
         
-        prot_data <- try(mod_prot$protein_data(), silent = TRUE)
-        if (inherits(prot_data, "try-error") || is.null(prot_data)) {
-          df_final <- energy_df
-        } else {
-          df_prot <- prot_data() %>%
-            dplyr::transmute(
-              Pays = r_country(),
-              Scenario = as.character(scenario),
-              Scenario_label = if (exists("scenario_label", mode = "function", inherits = TRUE))
-                vapply(as.character(scenario), scenario_label, FUN.VALUE = character(1)) else as.character(scenario),
-              Annee = NA,
-              Item, Valeur = share, Unite = "%"
-            )
-          df_final <- dplyr::bind_rows(energy_df, df_prot)
+        # ====== PROTÉINES (parts %) =========================================
+        PROT_ELEMENT <- "Protein consumption per capita"
+        
+        yrs_prot <- fact %>%
+          dplyr::filter(
+            Region == r_country(),
+            stringr::str_trim(Element) == PROT_ELEMENT,
+            Scenario %in% SCEN_SHOW
+          ) %>%
+          dplyr::mutate(
+            Scenario = as.character(Scenario),
+            Scenario = factor(Scenario, levels = SCEN_SHOW)     # <<< au lieu de fct_relevel
+          ) %>%
+          dplyr::group_by(Scenario) %>%
+          dplyr::summarise(
+            year_used = suppressWarnings(max(Year[!is.na(Value)], na.rm = TRUE)),
+            .groups   = "drop"
+          ) %>%
+          dplyr::filter(is.finite(year_used)) %>%
+          dplyr::arrange(Scenario)
+        
+        
+        if (nrow(yrs_prot) == 0) {
+          readr::write_delim(energy_df, file, delim = ";")
+          return(invisible(NULL))
         }
         
+        pd_prot <- fact %>%
+          dplyr::inner_join(yrs_prot, by = "Scenario") %>%
+          dplyr::filter(
+            Region == r_country(),
+            stringr::str_trim(Element) == PROT_ELEMENT,
+            Year == year_used,
+            Item %in% r_items()
+          ) %>%
+          dplyr::group_by(Scenario, Item, year_used) %>%
+          dplyr::summarise(value = sum(Value, na.rm = TRUE), .groups = "drop") %>%
+          dplyr::group_by(Scenario, year_used) %>%
+          dplyr::mutate(
+            total = sum(value, na.rm = TRUE),
+            share = dplyr::if_else(total > 0, value / total, NA_real_),
+            share_pct = 100 * share
+          ) %>%
+          dplyr::ungroup()
+        
+        prot_df <- pd_prot %>%
+          dplyr::transmute(
+            Pays           = r_country(),
+            Scenario       = as.character(Scenario),
+            Scenario_label = label_scen(as.character(Scenario)),
+            Annee          = year_used,
+            Item           = Item,
+            Valeur         = share_pct,   # en %
+            Unite          = "%",
+            Type           = "protein_share"
+          )
+        
+        df_final <- dplyr::bind_rows(energy_df, prot_df)
+        
         readr::write_delim(df_final, file, delim = ";")
-      }
+      },
+      contentType = "text/csv"
     )
     
     # --- Note de base ------------------------------------------------------
     output$note <- renderUI({
       htmltools::HTML("
-  The stacked bars above represent the <strong>total daily energy supply per capita</strong> (kcal/hab/day)
-  under each dietary scenario.<br>
-  The charts below show either the energy shares of each product
-  or their contribution to total protein or energy intake.
-  </p>")
+        <p>
+          The stacked bars above represent the <strong>total daily energy supply per capita</strong> (kcal/hab/day)
+          under each dietary scenario.<br>
+          The charts below show either the energy shares of each product
+          or their contribution to total protein or energy intake.
+        </p>")
     })
+    
   })
 }

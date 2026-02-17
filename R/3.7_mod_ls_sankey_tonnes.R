@@ -59,10 +59,8 @@ mod_ls_sankey_tonnes_ui <- function(id, plot_height = "500px"){
   tagList(
     div(class = "card",
         div(class = "card-body",
-            
-            # --- Titre Sankey + toggles -------------------------------------
-            h2(textOutput(ns("title_flow"))),
-            tags$div(style="height:12px"),
+            h2(textOutput(ns("title_domestic"))),
+            tags$div(style="height:8px"),
             div(class = "d-flex gap-3 flex-wrap align-items-center",
                 tags$label("Product group", `for` = ns("prod_sel"), class = "form-label mb-1"),
                 selectInput(
@@ -72,27 +70,22 @@ mod_ls_sankey_tonnes_ui <- function(id, plot_height = "500px"){
                   width    = "260px"
                 ),
                 radioButtons(
-                ns("unit"),
-                label    = NULL,
-                choices  = c("Mass (tonnes)" = "mass", "Energy (Gcal)" = "energy"), selected = "mass",
-                inline   = TRUE
-              ),
-              tags$div(style="height:12px")
+                  ns("unit"),
+                  label    = NULL,
+                  choices  = c("Mass (tonnes)" = "mass", "Energy (Gcal)" = "energy"), selected = "mass",
+                  inline   = TRUE
+                ),
+                tags$div(style="height:8px"),
+                h4(tags$em("(Click on the scenario box you want to see)")),
+                uiOutput(ns("tiles")),
+                tags$div(style="height:20px"),
+            h2(textOutput(ns("title_flow")))
             ),
-            
-            # --- Titre + tuiles KPI -----------------------------------------
-            h2(textOutput(ns("title_domestic"))),
-            tags$div(style="height:8px"),
-            uiOutput(ns("tiles")),
-            tags$div(style="height:28px"),
-            
             # --- Toggle % -----------------------------------------
             div(class = "ms-auto",
               checkboxInput(ns("as_pct"), "Show as percentage (%)",
                             value = FALSE, width = "auto")
             ),
-            
-            # --- Plot + export ----------------------------------------------
             plotly::plotlyOutput(ns("sankey"), height = plot_height),
             div(class = "text-right",
                 div(class = "u-actions",
@@ -797,29 +790,58 @@ mod_ls_sankey_tonnes_server <- function(
       unit_txt <- if (identical(sd$unit_mode, "energy")) "energy (Gcal)" else "mass (tonnes)"
       base_lbl <- sc_label(scen_base_year)
       
+      # Seed n’existe que dans le mode mass dans ton mapping
+      seed_txt <- if (identical(sd$unit_mode, "mass")) "Seed" else NULL
+      uses_list <- c("Food", "Feed", "Processing", "Losses", seed_txt, "Other uses (non-food)", "Unused")
+      uses_list <- uses_list[!is.null(uses_list) & nzchar(uses_list)]
+      
       txt <- glue::glue(
         "<p>
-        This figure shows, for the selected country and product group, how <strong>livestock products</strong>
-        flow through the agri-food system in <strong>{unit_txt}</strong>.<br>
-        The tiles above the diagram indicate, for each scenario, the total <strong>domestic supply</strong> of the selected products
-        in <strong>{sd$unit_label}</strong>, together with the percentage change compared with <strong>{base_lbl}</strong>.
-        </p>
-        <p>
-        The Sankey diagram below details the selected scenario ({sd$scenario_label}, {sd$year_used}):
-        flows from <em>Production</em> and <em>Imports</em> to <em>Domestic supply</em> and <em>Exports</em>, and then to final uses
-        (<em>Food</em>, <em>Feed</em>, <em>Processing</em>, <em>Losses</em>, <em>Seed</em>, <em>Other uses (non-food)</em>, <em>Unused</em>).
-        </p>
-        <p>
-        When <strong>\"Show as percentage (%)\"</strong> is ticked, node and link labels are expressed as shares of reference poles
-        (exports relative to total exports; other links relative to domestic supply). Tooltips always include underlying volumes in <strong>{sd$unit_label}</strong>.
-        </p>
-        <p>
-        <em>Unused</em> is displayed as the balancing item when needed: it captures the residual between <em>Domestic supply</em> and the sum of other internal uses.
-        </p>"
+      This figure shows, for the selected country and product group, how <strong>livestock products</strong>
+      flow through the agri-food system in <strong>{unit_txt}</strong>.
+    </p>
+
+    <p>
+      The tiles above the diagram indicate, for each scenario, the total <strong>domestic supply</strong> of the selected products
+      in <strong>{sd$unit_label}</strong>, together with the percentage change compared with <strong>{base_lbl}</strong>.
+    </p>
+
+    <p><strong>Representation</strong></p>
+    <ul>
+      <li><strong>Energy</strong>: flows are expressed in Gcal.</li>
+      <li><strong>Mass</strong>: flows are expressed in tonnes, by summing, for each element, all selected livestock items
+          (note: tonnes aggregate heterogeneous products, so the largest flows reflect volumes and composition effects;
+          use Energy (Gcal) for nutritional interpretation).</li>
+    </ul>
+
+    <p><strong>Reading the Sankey</strong></p>
+    <ul>
+      <li>The diagram details the selected scenario (<strong>{sd$scenario_label}</strong>, <strong>{sd$year_used}</strong>).</li>
+      <li>Flows go from <em>Production</em> and <em>Imports</em> to <em>Domestic supply</em> and <em>Exports</em>,
+          and then to final uses (<em>{paste(uses_list, collapse = \"</em>, <em>\")}</em>).</li>
+    </ul>
+
+    <p><strong>Show as percentage (%)</strong></p>
+    <ul>
+      <li><strong>Sources</strong> (left side): percentages at Production and Imports indicate the share of total sources,
+          i.e. Production + Imports (equivalently Domestic supply + Exports).</li>
+      <li><strong>Market balance</strong> (middle): percentages at Domestic supply and Exports describe how total marketable quantities
+          (Domestic supply + Exports) are split between internal and external uses.</li>
+      <li><strong>Uses</strong> (right side): percentages at Food, Feed, Processing, Losses and Other uses (non-food)
+          show each use as a share of Domestic supply.</li>
+      <li>Tooltips always include underlying volumes in <strong>{sd$unit_label}</strong>.</li>
+    </ul>
+
+    <p><strong>Balancing item</strong></p>
+    <ul>
+      <li><em>Unused</em> is displayed as the balancing item when needed: it captures the residual between <em>Domestic supply</em>
+          and the sum of other internal uses.</li>
+    </ul>"
       )
       
       htmltools::HTML(txt)
     })
+    
     
     return(list(selected_scenario = reactive(r_selected())))
   })

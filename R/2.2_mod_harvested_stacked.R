@@ -1,9 +1,5 @@
 # R/2.2_mod_harvested_stacked.R
 # ---------------------------------------------------------------
-# Module : barres empilées "Area harvested" + cartes KPI
-# - Ordre de légende fixé : Cereals -> Pulses -> Roots and tubers -> Oilseeds -> Other
-# - Tooltip: ajout Δ% vs base-year par item
-# ---------------------------------------------------------------
 
 mod_harvested_stacked_ui <- function(id, height = "480px", full_width = TRUE){
   ns <- NS(id)
@@ -12,7 +8,7 @@ mod_harvested_stacked_ui <- function(id, height = "480px", full_width = TRUE){
     div(
       class = "card-body",
       
-      h2("Area harvested per crop according to the scenarios (in hectares)"),
+      h2("Area harvested per crop according to the scenarios (in million hectares)"),
       
       uiOutput(ns("limit_msg")),
       
@@ -506,8 +502,8 @@ mod_harvested_stacked_server <- function(
       htmltools::HTML(glue::glue(
         "<p>
         This chart shows, for the selected country, the <strong>harvested area</strong> in the
-        base-year (2018) and under the different scenarios.<br>
-        Each stacked bar represents the total harvested area (in hectares), broken down
+        base year and under the different scenarios.<br>
+        Each stacked bar represents the total harvested area in million hectares, broken down
         by crop. The dashed line marks the harvested area in the base year.
         </p>
         <p>

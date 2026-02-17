@@ -400,8 +400,8 @@ mod_livestock_dairy_productivity_server <- function(
       
       htmltools::HTML(glue::glue(
         "<p>
-        Dairy productivity is computed as <strong>Production (Dairy)</strong> divided by <strong>tropical livestock unit (TLU) (Dairy)</strong>,
-        expressed in <strong>tons/TLU</strong>.<br>
+        Dairy productivity is computed as <strong>Production </strong> divided by <strong>tropical livestock unit (TLU)</strong>,
+        expressed in <strong>tons/TLU</strong>. If a scenario has no data, then there is no milk production in this scenario. <br>
         </p>"
       ))
     })

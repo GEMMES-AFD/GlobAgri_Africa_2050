@@ -1,4 +1,4 @@
-# R/3.3_mod_livestock_stocks.R
+# R/3.3_mod_livestock_stocks_system.R
 # ======================================================================
 
 # ---- Local helpers -------------------------------------------------------
@@ -13,6 +13,28 @@ RUMINANT_GROUPS <- c(
   "Dairy sheep and goats",
   "Meat sheep and goats"
 )
+
+# ---- Display labels (UI only; internal codes unchanged) -------------------
+RUMINANT_GROUP_LABELS <- c(
+  "Beef cattle"           = "Beef cattle",
+  "Dairy cattle"          = "Dairy cattle",
+  "Dairy sheep and goats" = "Dairy small ruminants",
+  "Meat sheep and goats"  = "Meat small ruminants"
+)
+
+rum_group_label <- function(code){
+  code <- as.character(code)
+  out  <- unname(RUMINANT_GROUP_LABELS[code])
+  ifelse(is.na(out) | out == "", code, out)
+}
+
+rum_group_label_vec <- function(x){
+  x <- as.character(x)
+  vapply(x, rum_group_label, character(1))
+}
+
+# reverse map (legend label -> internal code)
+RUM_LABEL_TO_CODE <- setNames(names(RUMINANT_GROUP_LABELS), unname(RUMINANT_GROUP_LABELS))
 
 # ---- LSU/TLU settings ----------------------------------------------------
 LSU_ELEMENT <- "LSU"
@@ -92,7 +114,8 @@ mod_livestock_system_stocks_ui <- function(
             checkboxGroupInput(
               ns("rum_groups"),
               label    = NULL,
-              choices  = RUMINANT_GROUPS,
+              # UI labels, internal values unchanged
+              choices  = setNames(RUMINANT_GROUPS, rum_group_label_vec(RUMINANT_GROUPS)),
               selected = RUMINANT_GROUPS,
               inline   = TRUE
             )
@@ -145,7 +168,7 @@ mod_livestock_system_stocks_server <- function(
     r_scenarios = shiny::reactive(NULL)
 ){
   moduleServer(id, function(input, output, session){
-
+    
     # ---- Dependencies from CONFIG ----------------------------------------
     if (!exists("scenario_label", mode = "function", inherits = TRUE)) {
       stop("mod_livestock_system_stocks_server(): missing dependency 'scenario_label(code)'.")
@@ -154,19 +177,19 @@ mod_livestock_system_stocks_server <- function(
       x <- as.character(x)
       vapply(x, scenario_label, character(1))
     }
-
+    
     scenario_levels_all <- if (exists("SCENARIO_LEVELS_DEFAULT", inherits = TRUE)) {
       get("SCENARIO_LEVELS_DEFAULT", inherits = TRUE)
     } else {
       sort(unique(.get_fact(fact)$Scenario))
     }
-
+    
     base_year <- if (exists("BASE_YEAR", inherits = TRUE)) {
       as.integer(get("BASE_YEAR", inherits = TRUE))
     } else {
       2018L
     }
-
+    
     scen_levels_effective <- reactive({
       sc <- scenario_levels_all
       if (!is.null(r_scenarios) && !is.null(r_scenarios())) {
@@ -174,7 +197,7 @@ mod_livestock_system_stocks_server <- function(
       }
       sc
     })
-
+    
     # Baseline scenario code from CONFIG (no hard-coded name)
     scen_base <- reactive({
       sc_eff <- scen_levels_effective()
@@ -184,7 +207,7 @@ mod_livestock_system_stocks_server <- function(
         ""
       }
       if (nzchar(b) && b %in% sc_eff) return(b)
-
+      
       b2 <- if (exists("SCENARIOS_BASE_CODES", inherits = TRUE)) {
         intersect(get("SCENARIOS_BASE_CODES", inherits = TRUE), sc_eff)
       } else {
@@ -192,7 +215,7 @@ mod_livestock_system_stocks_server <- function(
       }
       b2[1] %||% sc_eff[1]
     })
-
+    
     # ---- Palettes ---------------------------------------------------------
     group_palette_for <- function(groups_vec){
       groups_vec <- intersect(RUMINANT_GROUPS, groups_vec)
@@ -201,41 +224,45 @@ mod_livestock_system_stocks_server <- function(
       if (any(is.na(cols))) cols[is.na(cols)] <- scales::hue_pal()(sum(is.na(cols)))
       setNames(cols, groups_vec)
     }
-
+    
     pal_sys <- local({
       out <- COL_SYSTEMS
       miss <- LS_SYSTEM_LEVELS[is.na(out[LS_SYSTEM_LEVELS])]
       if (length(miss)) out[miss] <- scales::hue_pal()(length(miss))
       out[LS_SYSTEM_LEVELS]
     })
-
+    
     # ---- Legend-driven filtering state (no plotly::event_data) ------------
     rv_hidden_groups <- reactiveVal(character(0))
-
+    
     observeEvent(input$rum_groups, {
       rv_hidden_groups(character(0))
     }, ignoreInit = TRUE)
-
+    
     observeEvent(list(r_country(), input$scen_cmp), {
       rv_hidden_groups(character(0))
     }, ignoreInit = TRUE)
-
+    
     observeEvent(input$bars_legend_evt, {
       ed <- input$bars_legend_evt
       req(is.list(ed), ed$type, ed$name)
-
-      nm  <- as.character(ed$name)
+      
+      nm <- as.character(ed$name)
+      
+      # NEW: legend label -> internal code (fallback if already a code)
+      nm_code <- RUM_LABEL_TO_CODE[[nm]] %||% nm
+      
       sel <- intersect(RUMINANT_GROUPS, input$rum_groups %||% RUMINANT_GROUPS)
-      if (!(nm %in% sel)) return()
-
+      if (!(nm_code %in% sel)) return()
+      
       if (identical(ed$type, "click")) {
         hid <- rv_hidden_groups()
-        hid <- if (nm %in% hid) setdiff(hid, nm) else union(hid, nm)
+        hid <- if (nm_code %in% hid) setdiff(hid, nm_code) else union(hid, nm_code)
         rv_hidden_groups(intersect(hid, sel))
       }
-
+      
       if (identical(ed$type, "doubleclick")) {
-        target_hid <- setdiff(sel, nm)
+        target_hid <- setdiff(sel, nm_code)
         if (setequal(rv_hidden_groups(), target_hid)) {
           rv_hidden_groups(character(0))
         } else {
@@ -243,25 +270,25 @@ mod_livestock_system_stocks_server <- function(
         }
       }
     }, ignoreInit = TRUE)
-
+    
     groups_for_pies <- reactive({
       sel <- intersect(RUMINANT_GROUPS, input$rum_groups %||% RUMINANT_GROUPS)
       if (!length(sel)) sel <- RUMINANT_GROUPS
       setdiff(sel, rv_hidden_groups())
     })
-
+    
     # ---- Build clean df (LSU / 1000TLU) ----------------------------------
     prep_df <- reactive({
       req(r_country())
       df0 <- .get_fact(fact)
       req(df0)
-
+      
       need_cols <- c("Region","Scenario","Element","Item","Year","System","Animal","Unit","Value")
       miss <- setdiff(need_cols, names(df0))
       validate(need(length(miss) == 0, paste("Missing columns:", paste(miss, collapse = ", "))))
-
+      
       scen_allowed <- scen_levels_effective()
-
+      
       df <- df0 %>%
         dplyr::mutate(
           Element = stringr::str_trim(as.character(.data$Element)),
@@ -278,7 +305,7 @@ mod_livestock_system_stocks_server <- function(
           !is.na(.data$System)
         ) %>%
         dplyr::mutate(Year = suppressWarnings(as.integer(.data$Year)))
-
+      
       v_raw <- df$Value
       v_num <- suppressWarnings(as.numeric(v_raw))
       if (anyNA(v_num) && !is.numeric(v_raw)) {
@@ -287,20 +314,20 @@ mod_livestock_system_stocks_server <- function(
           locale = readr::locale(decimal_mark = ",")
         )
       }
-
+      
       df2 <- df %>%
         dplyr::mutate(
           Value_num = v_num,
-          mult      = 1000,                     # 1000TLU -> TLU (same pattern as 1000 Head -> Head)
+          mult      = 1000,                     # 1000TLU -> TLU
           head      = .data$Value_num * .data$mult,
           Unit_out  = "TLU",
-
+          
           group_raw = dplyr::coalesce(.data$Animal, .data$Item),
           animal_lc = stringr::str_to_lower(dplyr::coalesce(.data$Animal, "")),
           item_lc   = stringr::str_to_lower(dplyr::coalesce(.data$Item, "")),
-
+          
           is_dairy  = (animal_lc == "dairy") | (stringr::str_to_lower(dplyr::coalesce(.data$group_raw, "")) == "dairy"),
-
+          
           group = dplyr::case_when(
             is_dairy & stringr::str_detect(item_lc, "\\bbeef\\s+cattle\\b") ~ "Beef cattle",
             is_dairy & item_lc == "dairy"                                   ~ "Dairy cattle",
@@ -310,12 +337,12 @@ mod_livestock_system_stocks_server <- function(
             TRUE                                                            ~ .data$group_raw
           )
         )
-
+      
       dairy_unclassified <- df2 %>%
         dplyr::filter(.data$is_dairy, is.na(.data$group)) %>%
         dplyr::distinct(.data$Item) %>%
         dplyr::pull(.data$Item)
-
+      
       validate(need(
         length(dairy_unclassified) == 0,
         paste0(
@@ -325,7 +352,7 @@ mod_livestock_system_stocks_server <- function(
           if (length(dairy_unclassified) > 6) " | ..." else ""
         )
       ))
-
+      
       df2 %>%
         dplyr::filter(.data$group %in% RUMINANT_GROUPS) %>%
         dplyr::mutate(
@@ -335,71 +362,71 @@ mod_livestock_system_stocks_server <- function(
         dplyr::filter(!is.na(.data$System)) %>%
         dplyr::select(Region, Scenario, Year, System, group, Unit_out, head)
     })
-
+    
     # ---- Populate scenario dropdown (labels from scenario_label) ----------
     observeEvent(list(r_country(), scen_levels_effective(), scen_base()), {
       sc_eff <- scen_levels_effective()
       b      <- scen_base()
-
+      
       choices_codes <- setdiff(sc_eff, b)
       if (!length(choices_codes)) choices_codes <- sc_eff
-
+      
       updateSelectInput(
         session, "scen_cmp",
         choices  = setNames(choices_codes, scenario_label_vec(choices_codes)),
         selected = if (length(choices_codes)) choices_codes[1] else character(0)
       )
     }, ignoreInit = FALSE)
-
+    
     # scenario year: 2050 if available else max
     year_cmp <- reactive({
       req(input$scen_cmp)
       d <- prep_df()
-
+      
       y <- d %>%
         dplyr::filter(.data$Scenario == input$scen_cmp) %>%
         dplyr::distinct(.data$Year) %>%
         dplyr::pull(.data$Year)
-
+      
       if (!length(y)) return(NA_integer_)
       y <- y[is.finite(y)]
       if (!length(y)) return(NA_integer_)
-
+      
       if (2050L %in% y) return(2050L)
       suppressWarnings(as.integer(max(y, na.rm = TRUE)))
     })
-
+    
     output$caption_base_short <- renderUI({
       b <- scen_base()
       HTML(scenario_label(b))
     })
-
+    
     output$caption_scen_short <- renderUI({
       req(input$scen_cmp)
       HTML(scenario_label(input$scen_cmp))
     })
-
+    
     d_period <- reactive({
       req(input$scen_cmp)
       req(input$rum_groups)
-
+      
       sel_groups <- intersect(RUMINANT_GROUPS, input$rum_groups)
       validate(need(length(sel_groups) > 0, "Select at least one ruminant group."))
-
+      
       d <- prep_df()
       b <- scen_base()
-
+      
       df_base <- d %>%
         dplyr::filter(.data$Scenario == b, .data$Year == base_year, .data$group %in% sel_groups) %>%
         dplyr::mutate(period = "BASE")
-
+      
       yc <- year_cmp()
-      validate(need(!is.na(yc), "No year available for selected scenario."))
-
+      validate(need(!is.na(yc), "No data available for selected scenario."))
+      
       df_scen <- d %>%
         dplyr::filter(.data$Scenario == input$scen_cmp, .data$Year == yc, .data$group %in% sel_groups) %>%
         dplyr::mutate(period = "SCEN")
-
+      
       out <- dplyr::bind_rows(df_base, df_scen) %>%
         dplyr::group_by(.data$period, .data$System, .data$group) %>%
         dplyr::summarise(head = sum(.data$head, na.rm = TRUE), .groups = "drop") %>%
@@ -408,7 +435,7 @@ mod_livestock_system_stocks_server <- function(
           System = factor(.data$System, levels = LS_SYSTEM_LEVELS),
           group  = factor(as.character(.data$group), levels = sel_groups)
         )
-
+      
       out %>%
         tidyr::complete(
           period = c("BASE","SCEN"),
@@ -417,25 +444,58 @@ mod_livestock_system_stocks_server <- function(
           fill   = list(head = 0)
         )
     })
-
+    
+    # ---- Bars -------------------------------------------------------------
     # ---- Bars -------------------------------------------------------------
     output$p_bars <- renderPlotly({
       req(input$scen_cmp)
-
-      sel_groups <- intersect(RUMINANT_GROUPS, input$rum_groups %||% character(0))
+      
+      # ------------------------------------------------------------
+      # 1) Mapping "codes internes" -> "labels affichés"
+      #    (On NE change pas les codes utilisés pour la data/palette)
+      # ------------------------------------------------------------
+      RUM_CODE_TO_LABEL <- c(
+        "Beef cattle"           = "Beef cattle",
+        "Dairy cattle"          = "Dairy cattle",
+        "Dairy sheep and goats" = "Small Dairy ruminants",
+        "Meat sheep and goats"  = "Small meat ruminants"
+      )
+      
+      rum_group_label <- function(code){
+        code <- as.character(code)
+        out  <- unname(RUM_CODE_TO_LABEL[code])
+        ifelse(is.na(out) | out == "", code, out)
+      }
+      rum_group_label_vec <- function(x){
+        x <- as.character(x)
+        vapply(x, rum_group_label, character(1))
+      }
+      
+      # robuste: si input/legend renvoient déjà le label, on le reconvertit en code
+      RUM_LABEL_TO_CODE <- setNames(names(RUM_CODE_TO_LABEL), unname(RUM_CODE_TO_LABEL))
+      norm_group_code <- function(x){
+        x <- stringr::str_squish(as.character(x))
+        dplyr::recode(x, !!!RUM_LABEL_TO_CODE, .default = x)
+      }
+      
+      # ------------------------------------------------------------
+      # 2) Sélection groupes (on accepte codes OU labels en input)
+      # ------------------------------------------------------------
+      sel_groups_in <- input$rum_groups %||% character(0)
+      sel_groups    <- intersect(RUMINANT_GROUPS, norm_group_code(sel_groups_in))
       if (!length(sel_groups)) return(.empty_plot("Select at least one ruminant group."))
-
+      
       yc <- year_cmp()
       if (is.na(yc)) return(.empty_plot("No year available for selected scenario."))
-
+      
       d <- d_period()
       if (!nrow(d)) return(.empty_plot("No system-level data to display."))
-
+      
       th <- get_plotly_tokens()
-
+      
       max_head <- max(d$head, na.rm = TRUE)
       if (!is.finite(max_head) || max_head <= 0) max_head <- 1
-
+      
       if (max_head >= 1e6) {
         div <- 1e6; ylab <- "Million TLU"
       } else if (max_head >= 1e3) {
@@ -443,36 +503,50 @@ mod_livestock_system_stocks_server <- function(
       } else {
         div <- 1; ylab <- "TLU"
       }
-
+      
       d2 <- d %>% dplyr::mutate(y = .data$head / div)
-
+      
       ymax_stack <- d2 %>%
         dplyr::group_by(.data$period, .data$System) %>%
         dplyr::summarise(y_tot = sum(.data$y, na.rm = TRUE), .groups = "drop") %>%
         dplyr::summarise(mx = max(.data$y_tot, na.rm = TRUE), .groups = "drop") %>%
         dplyr::pull(.data$mx)
-
+      
       if (!is.finite(ymax_stack) || ymax_stack <= 0) ymax_stack <- 1
       ymax <- 1.10 * ymax_stack
-
-      pal <- group_palette_for(sel_groups)
+      
+      # palette inchangée (codes -> couleurs)
+      pal_code <- group_palette_for(sel_groups) # names = codes
+      
       b_code  <- scen_base()
       b_label <- scenario_label(b_code)
       s_label <- scenario_label(input$scen_cmp)
-
-      mk <- function(dd, show_legend, y_title){
-
-        gg <- ggplot(dd, ggplot2::aes(
-          x = System, y = y, fill = group,
+      
+      mk <- function(dd, show_legend, y_title, sel_groups){
+        
+        # --- on switch le fill sur les LABELS, pas sur les codes ---
+        dd_plot <- dd %>%
+          dplyr::mutate(
+            group_code = as.character(.data$group),
+            group_lab  = rum_group_label(.data$group_code),
+            group_lab  = factor(.data$group_lab, levels = rum_group_label_vec(sel_groups))
+          )
+        
+        # --- même couleurs qu'avant, mais renommées par labels ---
+        pal_code_loc <- group_palette_for(sel_groups) # codes -> col
+        pal_lab      <- setNames(unname(pal_code_loc), rum_group_label_vec(names(pal_code_loc)))
+        
+        gg <- ggplot(dd_plot, ggplot2::aes(
+          x = System, y = y, fill = group_lab,
           text = paste0(
             "System: ", System, "<br>",
-            "Group: ", group, "<br>",
-            "Stock: ", scales::comma(head), " TLU"
+            "Group: ", as.character(group_lab), "<br>",
+            "Stock: ", formatC(head, format = "f", digits = 0, big.mark = " ", decimal.mark = "."), " TLU"
           )
         )) +
           ggplot2::geom_col(width = 0.72) +
           ggplot2::scale_x_discrete(drop = FALSE, expand = ggplot2::expansion(add = c(0.55, 1.10))) +
-          ggplot2::scale_fill_manual(values = pal, drop = FALSE) +
+          ggplot2::scale_fill_manual(values = pal_lab, drop = FALSE) +
           ggplot2::scale_y_continuous(labels = scales::label_number(accuracy = 0.1)) +
           ggplot2::coord_cartesian(ylim = c(0, ymax), expand = FALSE) +
           ggplot2::labs(x = NULL, y = y_title, fill = NULL) +
@@ -488,7 +562,7 @@ mod_livestock_system_stocks_server <- function(
             axis.text.y       = ggplot2::element_text(color = th$muted_color),
             axis.title.y      = ggplot2::element_text(margin = ggplot2::margin(r = 6), color = th$muted_color)
           )
-
+        
         pl <- plotly::ggplotly(gg, tooltip = "text") %>%
           plotly::layout(
             barmode = "stack",
@@ -508,22 +582,22 @@ mod_livestock_system_stocks_server <- function(
             ),
             margin = list(l = 40, r = 24, b = 36, t = 8, pad = 0)
           )
-
+        
         pl <- plotly_apply_global_theme(pl, bg = "transparent", grid = "y")
         pl
       }
-
-      p_left  <- mk(d2 %>% dplyr::filter(period == "BASE"), show_legend = FALSE, y_title = ylab)
-      p_right <- mk(d2 %>% dplyr::filter(period == "SCEN"), show_legend = TRUE,  y_title = "") %>%
+      
+      p_left  <- mk(d2 %>% dplyr::filter(period == "BASE"), show_legend = FALSE, y_title = ylab, sel_groups = sel_groups)
+      p_right <- mk(d2 %>% dplyr::filter(period == "SCEN"), show_legend = TRUE,  y_title = "",   sel_groups = sel_groups) %>%
         plotly::layout(yaxis = list(title = list(text = "")))
-
+      
       p <- plotly::subplot(p_left, p_right, nrows = 1, shareY = TRUE, titleX = TRUE, titleY = TRUE) %>%
         plotly::layout(
           barmode = "stack",
-
+          
           # more room on top for legend
           margin = list(l = 65, r = 20, t = 80, b = 60),
-
+          
           # legend above the whole plot
           legend = list(
             orientation = "h",
@@ -531,11 +605,11 @@ mod_livestock_system_stocks_server <- function(
             y = 1.12, yanchor = "bottom",
             font = list(color = th$muted_color)
           ),
-
+          
           xaxis  = list(ticklabelposition="outside", tickpadding=6, ticklen=6, automargin=TRUE, title=list(standoff=2)),
           xaxis2 = list(ticklabelposition="outside", tickpadding=6, ticklen=6, automargin=TRUE, title=list(standoff=2)),
           yaxis  = list(ticklabelposition="outside", tickpadding=6, ticklen=6, automargin=TRUE, title=list(standoff=2)),
-
+          
           shapes = list(
             list(
               type  = "line",
@@ -546,7 +620,7 @@ mod_livestock_system_stocks_server <- function(
               line = list(color = th$baseline_color, width = 2)
             )
           ),
-
+          
           annotations = list(
             list(
               text = b_label,
@@ -577,9 +651,9 @@ mod_livestock_system_stocks_server <- function(
             "autoScale2d","pan2d","resetScale2d"
           )
         )
-
+      
       p <- plotly_apply_global_theme(p, bg = "transparent", grid = "y")
-
+      
       # Fix legend duplication
       seen <- character(0)
       p$x$data <- lapply(p$x$data, function(tr){
@@ -599,7 +673,7 @@ mod_livestock_system_stocks_server <- function(
         }
         tr
       })
-
+      
       # Capture legend interactions via JS
       inp_id <- session$ns("bars_legend_evt")
       p <- htmlwidgets::onRender(
@@ -634,19 +708,20 @@ gd.on('plotly_legenddoubleclick', function(e){
 });
 }", inp_id, inp_id)
       )
-
+      
       p
     })
-
+    
+    
     # ---- Pies -------------------------------------------------------------
     pie_data <- reactive({
       req(input$scen_cmp, input$rum_groups)
       yc <- year_cmp()
       req(!is.na(yc))
-
+      
       g_pie <- groups_for_pies()
       validate(need(length(g_pie) > 0, "No ruminant group visible for pies (all hidden)."))
-
+      
       d_period() %>%
         dplyr::filter(.data$group %in% g_pie) %>%
         dplyr::group_by(.data$period, .data$System) %>%
@@ -658,29 +733,26 @@ gd.on('plotly_legenddoubleclick', function(e){
           fill   = list(head = 0)
         )
     })
-
+    
     make_pie <- function(dd, show_legend = FALSE){
       th <- get_plotly_tokens()
-
+      
       total <- sum(dd$head, na.rm = TRUE)
       dd2 <- dd %>%
         dplyr::mutate(
           pct100  = if (is.finite(total) && total > 0) 100 * head / total else 0,
           pct_txt = ifelse(pct100 < 0.05, "", sprintf("%.1f%%", pct100))
         )
-
+      
       p <- plotly::plot_ly(
         data   = dd2,
         type   = "pie",
         labels = ~System,
         values = ~head,
-
-        # always horizontal, and auto -> outside if slice too small
         text   = ~pct_txt,
         textinfo = "text",
         textposition = "auto",
         insidetextorientation = "horizontal",
-
         textfont = list(color = th$font_color, size = 12),
         marker = list(colors = unname(pal_sys[as.character(dd2$System)])),
         hovertemplate = paste0(
@@ -701,11 +773,11 @@ gd.on('plotly_legenddoubleclick', function(e){
           )
         ) %>%
         plotly::config(displayModeBar = FALSE)
-
+      
       p <- plotly_apply_global_theme(p, bg = "transparent", grid = "none")
       p
     }
-
+    
     output$p_pie_base <- renderPlotly({
       req(input$scen_cmp, input$rum_groups)
       if (!length(groups_for_pies())) return(.empty_plot("No ruminant group visible for pies (all hidden)."))
@@ -713,7 +785,7 @@ gd.on('plotly_legenddoubleclick', function(e){
       if (!nrow(d) || sum(d$head, na.rm = TRUE) <= 0) return(.empty_plot("No data for current selection."))
       make_pie(d, show_legend = FALSE)
     })
-
+    
     output$p_pie_scen <- renderPlotly({
       req(input$scen_cmp, input$rum_groups)
       if (!length(groups_for_pies())) return(.empty_plot("No ruminant group visible for pies (all hidden)."))
@@ -721,7 +793,7 @@ gd.on('plotly_legenddoubleclick', function(e){
       if (!nrow(d) || sum(d$head, na.rm = TRUE) <= 0) return(.empty_plot("No data for current selection."))
       make_pie(d, show_legend = TRUE)
     })
-
+    
     # ---- CSV export -------------------------------------------------------
     output$dl_livestock_system_csv <- downloadHandler(
       filename = function() {
@@ -731,12 +803,12 @@ gd.on('plotly_legenddoubleclick', function(e){
         req(input$scen_cmp, input$rum_groups)
         yc <- year_cmp()
         req(!is.na(yc))
-
+        
         sel_groups <- intersect(RUMINANT_GROUPS, input$rum_groups)
         req(length(sel_groups) > 0)
-
+        
         b <- scen_base()
-
+        
         df <- prep_df() %>%
           dplyr::filter(.data$group %in% sel_groups) %>%
           dplyr::filter(
@@ -749,37 +821,37 @@ gd.on('plotly_legenddoubleclick', function(e){
             Unit   = "TLU"
           ) %>%
           dplyr::select(Region, Scenario, Year, System, group, Unit, head)
-
+        
         df_sys_tot <- df %>%
           dplyr::group_by(Region, Scenario, Year, System) %>%
           dplyr::summarise(head = sum(head, na.rm = TRUE), .groups = "drop") %>%
           dplyr::mutate(group = "ALL_SELECTED_RUMINANTS", Unit = "TLU") %>%
           dplyr::select(Region, Scenario, Year, System, group, Unit, head)
-
+        
         final <- dplyr::bind_rows(
           df %>% dplyr::mutate(dataset = "system_x_group"),
           df_sys_tot %>% dplyr::mutate(dataset = "system_total")
         ) %>%
           dplyr::select(dataset, Region, Scenario, Year, System, group, Unit, head)
-
+        
         readr::write_delim(final, file, delim = ";", na = "")
       }
     )
-
+    
     # ---- Note -------------------------------------------------------------
     output$note <- renderUI({
-      b <- scen_base()
-      txt <- paste0(
-        "<p>",
-        "<strong>How to read these charts:</strong> This module compares the <strong>baseline</strong> (",
-        scenario_label(b), ", ", base_year, ") with the selected scenario (", scenario_label(input$scen_cmp %||% ""), ").<br>",
-        "The stacked bars show <strong>ruminant stocks (TLU)</strong> by livestock system, with colours representing ruminant groups.<br>",
-        "The pie charts show the <strong>share of systems</strong> in total selected ruminant stocks (%).",
-        "</p>"
-      )
-      htmltools::HTML(txt)
+      b  <- scen_base()
+      yc <- year_cmp()
+      yc_txt <- if (is.na(yc)) "n/a" else as.character(yc)
+      
+      htmltools::HTML(paste0(
+        "The purpose of this module is to compare the <strong>quantity of ruminant animals (in TLU)</strong> by <strong>livestock system</strong> ",
+        "between the <strong>base year</strong> and the <strong>selected scenarios</strong>.</p>",
+        "<p><strong>Stacked bars</strong> show the <strong>absolute stocks (TLU)</strong> by system, with colours indicating the ruminant groups (according to your selection).</p>",
+        "<p><strong>Pie charts</strong> present the same information as <strong>shares (%)</strong>, i.e. the proportion of each system in the total selected ruminant stocks.</p>"
+      ))
     })
-
+    
     invisible(list(
       scen_levels_effective = scen_levels_effective
     ))

@@ -135,23 +135,28 @@ pal_livestock <- function(items){
 
 sankey_node_palette <- function(){
   c(
-    # Sources / reservoirs
-    "Production"        = ITEM_COLORS[["Dairy"]]                 %||% "#4E79A7",
-    "Imports"           = ITEM_COLORS[["Pulses"]]                %||% "#BAB0AC",
-    "Exports"           = "#9C755F",
-    "Domestic supply"   = AREA_COLORS[["Cropland"]]              %||% "#F28E2B",
+    # Sources / reservoirs (blue family, dark-friendly)
+    "Production"            = "#2F5DA8",  # deep blue
+    "Imports"               = "#1F9BB6",  # teal
+    "Domestic supply"       = "#FB923C",  # light sky (pivot)
     
-    # Uses
-    "Food"              = ITEM_COLORS[["Cereals"]]               %||% "#E15759",
-    "Feed"              = ITEM_COLORS[["Meat, eggs and fish"]]   %||% "#59A14F",
-    "Losses"            = ITEM_COLORS[["Roots and tubers"]]      %||% "#EDC948",
-    "Seed"              = ITEM_COLORS[["Pulses"]]                %||% "#76B7B2",
-    "Other uses (non-food)" = ITEM_COLORS[["Other"]]             %||% "#AF7AA1",
+    # External sink (neutral)
+    "Exports"               = "#94A3B8",  # slate-300
     
-    # Technique / fallback (si jamais utilisé)
-    "Unallocated"       = ITEM_COLORS[["Vegetables and fruits"]] %||% "#9C755F"
+    # Uses (muted accents, readable on dark)
+    "Food"                  = "#F87171",  # soft red
+    "Feed"                  = "#34D399",  # mint green
+    "Losses"                = "#FBBF24",  # amber
+    "Seed"                  = "#A3E635",  # lime
+    "Other uses (non-food)" = "#9C755F",  # soft orange
+    
+    # Technique / balancing (very subdued)
+    "Unallocated"           = "#C4B5FD",  # soft purple
+    "Residual (balancing)"  = "#C4B5FD",
+    "Unused"                = "#C4B5FD"
   )
 }
+
 
 sankey_node_colors_for <- function(labels){
   pal  <- sankey_node_palette()
@@ -173,95 +178,6 @@ sankey_link_colors_from_src <- function(src_labels, alpha = 0.35){
   hex <- sankey_node_colors_for(src_labels)
   vapply(hex, function(h) hex_to_rgba(h, alpha), character(1))
 }
-
-
-# =============================================================================
-# F) Émissions (inventaire GHG)
-# =============================================================================
-
-EMISSIONS_COLORS <- c(
-  "Enteric fermentation"   = "#59A14F",
-  "Manure management"      = "#4E79A7",
-  "Manure on soils"        = "#76B7B2",
-  "Synthetic fertilizer"   = "#F28E2B",
-  "Organic fertilizer"     = "#AF7AA1",
-  "Rice cultivation"       = "#EDC948",
-  "Crop residues"          = "#E15759",
-  "Energy use"             = "#9C755F",
-  "Other"                  = "#BAB0AC",
-  "Land use change"        = "#8C564B"
-)
-emissions_colors_for <- function(items){
-  items <- as.character(items)
-  cols  <- EMISSIONS_COLORS
-  miss  <- setdiff(items, names(cols))
-  if (length(miss)) cols <- c(cols, setNames(scales::hue_pal()(length(miss)), miss))
-  cols[items]
-}
-
-# =============================================================================
-# F2) Émissions — couleurs "module GES" (wrapper unique)
-# =============================================================================
-
-# 1) Animaux: on fixe une base (stable) et on complète si besoin
-EMISSIONS_ANIMAL_COLORS <- c(
-  "Dairy"                 = ITEM_COLORS[["Dairy"]] %||% "#4E79A7",
-  "Beef cattle"           = ITEM_COLORS[["Meat, eggs and fish"]] %||% "#59A14F",
-  "Meat sheep and goats"  = "#E8C547",
-  "Poultry eggs"          = "#76B7B2",
-  "Poultry meat"          = "#F28E2B"
-)
-
-emissions_animal_colors_for <- function(items){
-  items <- as.character(items)
-  cols  <- EMISSIONS_ANIMAL_COLORS
-  miss  <- setdiff(items, names(cols))
-  if (length(miss)) cols <- c(cols, setNames(scales::hue_pal()(length(miss)), miss))
-  cols[items]
-}
-
-# 2) Sources: mapping des libellés rencontrés dans le module vers EMISSIONS_COLORS
-#    (on mappe d'abord, puis on réutilise emissions_colors_for)
-emissions_source_key_from_label <- function(x){
-  x2 <- gsub("_", " ", as.character(x))
-  
-  if (grepl("enteric", x2, ignore.case = TRUE)) return("Enteric fermentation")
-  if (grepl("manure\\s+management", x2, ignore.case = TRUE)) return("Manure management")
-  if (grepl("manure\\s+on\\s+soils", x2, ignore.case = TRUE)) return("Manure on soils")
-  if (grepl("synthetic\\s+fert", x2, ignore.case = TRUE)) return("Synthetic fertilizer")
-  if (grepl("organic\\s+fert", x2, ignore.case = TRUE)) return("Organic fertilizer")
-  if (grepl("rice", x2, ignore.case = TRUE)) return("Rice cultivation")
-  if (grepl("crop\\s+resid", x2, ignore.case = TRUE)) return("Crop residues")
-  
-  # Libellé custom du module (gaz ≠ CO2e)
-  if (grepl("on[- ]farm\\s+energy\\s+use", x2, ignore.case = TRUE)) return("Energy use")
-  if (grepl("\\benergy\\s+use\\b", x2, ignore.case = TRUE)) return("Energy use")
-  
-  if (tolower(trimws(x2)) == "other") return("Other")
-  
-  # Si c'est déjà une clé officielle (ex. "Enteric fermentation"), on la garde
-  x
-}
-
-emissions_module_colors_for <- function(items, breakdown = c("Item","Animal")){
-  breakdown <- match.arg(breakdown)
-  items <- as.character(items)
-  
-  if (breakdown == "Animal") {
-    return(emissions_animal_colors_for(items))
-  }
-  
-  # breakdown == "Item"
-  keys <- vapply(items, emissions_source_key_from_label, character(1))
-  # emissions_colors_for() complète automatiquement les clés inconnues via hue_pal()
-  cols_keys <- emissions_colors_for(unique(keys))
-  cols_keys <- as.character(cols_keys)
-  
-  out <- cols_keys[keys]
-  names(out) <- items
-  out
-}
-
 
 # =============================================================================
 # G) Pâturages (aride / non-aride)

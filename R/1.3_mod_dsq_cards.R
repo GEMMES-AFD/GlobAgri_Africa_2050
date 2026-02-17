@@ -5,6 +5,8 @@ mod_dsq_cards_ui <- function(id){
   tagList(
     h2(class = "section-title", textOutput(ns("title"))),
     tags$br(),
+    h4(tags$em("(Click on the scenario box you want to see)")),
+    
     div(id = ns("root"), uiOutput(ns("cards_row"))),
     tags$script(HTML(sprintf("
       $(document).on('click', '#%s .dsq-card', function(){

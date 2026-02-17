@@ -285,7 +285,7 @@ mod_land_use_area_change_server <- function(
           tickfont      = list(size = 13)
         ),
         yaxis = list(
-          title         = "Land use change (k ha)",
+          title         = "Land use change (1000 ha)",
           range         = y_range,
           zeroline      = TRUE,
           zerolinecolor = th$axis_linecolor %||% "rgba(0,0,0,.18)",
@@ -543,8 +543,7 @@ mod_land_use_area_change_server <- function(
       htmltools::HTML(glue::glue(
         "<p>
     This chart shows how land use areas change between
-    <strong>{BASE_YEAR}</strong> (baseline) and <strong>{TARGET_YEAR}</strong> under the scenarios displayed in the application.
-    Values are expressed as a difference relative to the baseline (in <strong>thousand hectares, k ha</strong>).
+    <strong>base year</strong> and the scenarios displayed in the application. Values are expressed as a difference relative to the baseline.
     </p>
     <p>
     For each scenario, the bars show the change in <strong>cropland</strong>,

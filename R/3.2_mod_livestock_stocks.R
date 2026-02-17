@@ -1,12 +1,5 @@
 # R/3.2_mod_livestock_stocks.R
 # ---------------------------------------------------------------
-# Livestock stocks cards (mix Heads + 1000TLU via Element == "LSU")
-# - Beef cattle / Dairy / Meat sheep and goats are taken from Element "LSU" (unit 1000TLU)
-# - They must NOT be displayed from "Stocks" (heads) anymore
-# - Remove "Dairy sheep and goats"
-# - Add +/- sign on % labels
-# - Add "(TLU)" or "(head)" in card titles
-# ---------------------------------------------------------------
 
 mod_livestock_stocks_ui <- function(id, title = "Stock of animals") {
   ns <- NS(id)
@@ -16,8 +9,13 @@ mod_livestock_stocks_ui <- function(id, title = "Stock of animals") {
       div(
         class = "card-body",
         h2(class = "card-title", title),
+        
+        # Legend once (centered)
+        uiOutput(ns("legend_global")),
+        
         tags$br(),
         uiOutput(ns("plots_grid")),
+        
         div(
           class = "u-actions",
           downloadLink(
@@ -25,6 +23,7 @@ mod_livestock_stocks_ui <- function(id, title = "Stock of animals") {
             label = tagList(icon("download"), "CSV")
           )
         ),
+        
         uiOutput(ns("note"))
       )
     )
@@ -91,7 +90,6 @@ mod_livestock_stocks_server <- function(
     scen_codes_ordered <- reactive({
       sc <- unique(as.character(r_scenarios()))
       sc <- sc[!is.na(sc) & nzchar(sc)]
-      
       shiny::validate(shiny::need(length(sc) > 0, "No scenario provided to the module."))
       
       known   <- intersect(SCENARIO_LEVELS_DEFAULT, sc)
@@ -105,9 +103,17 @@ mod_livestock_stocks_server <- function(
       c(SCENARIO_LEVELS_DEFAULT, setdiff(sc, SCENARIO_LEVELS_DEFAULT))
     })
     
-    # Baseline code = base year si dispo, sinon fallback
+    # IMPORTANT: on affiche tous les scénarios demandés même s'ils sont absents dans les données
+    scen_levels_effective <- reactive({
+      sc <- scen_codes_ordered()
+      ordered <- scen_levels_all()[scen_levels_all() %in% sc]
+      rest    <- setdiff(sc, ordered)
+      unique(c(ordered, rest))
+    })
+    
+    # Baseline code = base-year si dispo, sinon fallback
     scen_base <- reactive({
-      sc_eff <- scen_codes_ordered()
+      sc_eff <- scen_levels_effective()
       b <- as.character(get("SCENARIO_BASE_YEAR_CODE", inherits = TRUE))
       
       if (nzchar(b) && b %in% sc_eff) return(b)
@@ -122,35 +128,35 @@ mod_livestock_stocks_server <- function(
       paste0(
         "livestock_stocks|",
         r_country(), "|base_year=", base_year,
-        "|sc=", paste(scen_codes_ordered(), collapse = ",")
+        "|sc=", paste(scen_levels_effective(), collapse = ",")
       )
     })
     
-    # Scénarios effectivement utilisables = demandés ∩ présents (Stocks OU LSU/TLU)
-    scen_levels_effective <- reactive({
-      shiny::req(r_country())
+    # >>> GLOBAL LEGEND (ONCE) — uses CONFIG labels & colors & order <<<
+    output$legend_global <- renderUI({
+      lvls <- scen_levels_effective()
+      if (!length(lvls)) return(NULL)
       
-      wanted <- scen_codes_ordered()
+      pal <- scenario_palette(levels = lvls)
       
-      present_country <- fact %>%
-        dplyr::filter(
-          Region   == r_country(),
-          Scenario %in% wanted
-        ) %>%
-        dplyr::filter(
-          (Element == "Stocks" & Unit %in% c("Head","1000 Head") & !(Item %in% exclude_items)) |
-            (Element %in% TLU_ELEMENT_CODES & Unit %in% TLU_UNITS)
-        ) %>%
-        dplyr::distinct(Scenario) %>%
-        dplyr::pull(Scenario) %>%
-        as.character()
-      
-      keep <- intersect(wanted, present_country)
-      
-      ordered <- scen_levels_all()[scen_levels_all() %in% keep]
-      rest    <- setdiff(keep, ordered)
-      
-      unique(c(ordered, rest))
+      tags$div(
+        style = paste0(
+          "display:flex;justify-content:center;align-items:center;gap:14px;",
+          "flex-wrap:wrap;margin-top:8px;margin-bottom:2px;"
+        ),
+        lapply(lvls, function(sc){
+          col <- unname(pal[sc])
+          lab <- scenario_label(sc)
+          tags$div(
+            style = "display:flex;align-items:center;gap:8px;",
+            tags$span(style = paste0(
+              "display:inline-block;width:14px;height:14px;border-radius:4px;",
+              "background:", col, ";border:1px solid rgba(0,0,0,0.15);"
+            )),
+            tags$span(style = "font-size:12px;color:#FFFFFF;opacity:0.95;", lab)
+          )
+        })
+      )
     }) %>% shiny::bindCache(cache_key())
     
     # --- 1) Préparation : Stocks (heads) + LSU/TLU (1000TLU) ---------------
@@ -162,9 +168,9 @@ mod_livestock_stocks_server <- function(
       shiny::validate(shiny::need(length(miss) == 0, paste("Colonnes manquantes :", paste(miss, collapse=", "))))
       
       scen_allowed <- scen_levels_effective()
-      shiny::validate(shiny::need(length(scen_allowed) > 0, "No scenario available for livestock in this country."))
+      shiny::validate(shiny::need(length(scen_allowed) > 0, "No scenario provided to the module."))
       
-      # --- A) STOCKS (heads) : on EXCLUT les 3 items TLU/LSU + on SUPPRIME Dairy sheep&goats
+      # --- A) STOCKS (heads)
       df_heads <- fact %>%
         dplyr::filter(
           Region   == r_country(),
@@ -184,27 +190,13 @@ mod_livestock_stocks_server <- function(
             stringr::str_detect(animal_trim, regex("Dairy", ignore_case = TRUE)),
           
           Item_display = dplyr::case_when(
-            # Dairy cattle stays mapped (but will be excluded below because it is in TLU_ITEMS_DISPLAY)
-            animal_is_dairy &
-              item_trim %in% c("Dairy cattle", "Beef cattle") ~ "Dairy cattle",
+            animal_is_dairy & item_trim %in% c("Dairy cattle", "Beef cattle") ~ "Dairy cattle",
             
-            # IMPORTANT: we do NOT build "Dairy sheep and goats" anymore
-            # (removed on purpose)
-            
-            system_empty &
-              stringr::str_detect(item_trim, regex("Beef cattle", ignore_case = TRUE)) ~ "Beef cattle",
-            
-            system_empty &
-              stringr::str_detect(item_trim, regex("Sheep and goats meat", ignore_case = TRUE)) ~ "Sheep and goats meat",
-            
-            system_empty &
-              stringr::str_detect(item_trim, regex("Pigs", ignore_case = TRUE)) ~ "Pigs",
-            
-            system_empty &
-              stringr::str_detect(item_trim, regex("Poultry eggs", ignore_case = TRUE)) ~ "Poultry eggs",
-            
-            system_empty &
-              stringr::str_detect(item_trim, regex("Poultry meat", ignore_case = TRUE)) ~ "Poultry meat",
+            system_empty & stringr::str_detect(item_trim, regex("Beef cattle", ignore_case = TRUE)) ~ "Beef cattle",
+            system_empty & stringr::str_detect(item_trim, regex("Sheep and goats meat", ignore_case = TRUE)) ~ "Sheep and goats meat",
+            system_empty & stringr::str_detect(item_trim, regex("Pigs", ignore_case = TRUE)) ~ "Pigs",
+            system_empty & stringr::str_detect(item_trim, regex("Poultry eggs", ignore_case = TRUE)) ~ "Poultry eggs",
+            system_empty & stringr::str_detect(item_trim, regex("Poultry meat", ignore_case = TRUE)) ~ "Poultry meat",
             
             TRUE ~ NA_character_
           ),
@@ -216,10 +208,10 @@ mod_livestock_stocks_server <- function(
         dplyr::filter(!is.na(Item_display)) %>%
         dplyr::group_by(Item_display, unit_kind, Scenario, Year) %>%
         dplyr::summarise(value_raw = sum(value_raw, na.rm = TRUE), .groups = "drop") %>%
-        # Crucial: remove items that must be taken from LSU/1000TLU (no more Heads for bovins)
+        # Crucial: remove items that must be taken from LSU/1000TLU
         dplyr::filter(!(Item_display %in% TLU_ITEMS_DISPLAY))
       
-      # --- B) LSU/TLU (1000TLU) : mapping EXACT sur tes libellés (photo)
+      # --- B) LSU/TLU (1000TLU)
       df_tlu <- fact %>%
         dplyr::filter(
           Region   == r_country(),
@@ -230,8 +222,6 @@ mod_livestock_stocks_server <- function(
         dplyr::mutate(
           item_trim = stringr::str_trim(as.character(Item)),
           
-          # Mapping exact (photo):
-          # Item: "Beef cattle" ; "Dairy" ; "Meat sheep and goats"
           Item_display = dplyr::case_when(
             item_trim == "Beef cattle"          ~ "Beef cattle",
             item_trim == "Dairy"                ~ "Dairy cattle",
@@ -239,7 +229,7 @@ mod_livestock_stocks_server <- function(
             TRUE ~ NA_character_
           ),
           
-          # value_raw kept in "1000TLU" units (as in source)
+          # value_raw kept in "1000TLU" units
           value_raw = Value,
           unit_kind = "tlu"
         ) %>%
@@ -251,14 +241,19 @@ mod_livestock_stocks_server <- function(
       dplyr::bind_rows(df_heads, df_tlu)
     }) %>% shiny::bindCache(cache_key())
     
-    # --- 2) Compact : baseline (base_year si dispo) + année max par scénario ---
+    # --- 2) Compact : baseline + année max par scénario + IMPUTATION -------
     df_compact <- reactive({
       df <- prep_df()
-      if (nrow(df) == 0) {
-        return(tibble::tibble(Item_display=character(), unit_kind=character(), serie_code=character(), value_raw=double()))
-      }
-      
+      scen_allowed <- scen_levels_effective()
       b <- scen_base()
+      
+      if (nrow(df) == 0) {
+        return(tibble::tibble(
+          Item_display=character(), unit_kind=character(),
+          serie_code=character(), value_raw=double(),
+          is_imputed=logical(), serie_f=factor()
+        ))
+      }
       
       base_has_year <- df %>%
         dplyr::filter(Scenario == b, Year == base_year) %>%
@@ -299,16 +294,52 @@ mod_livestock_stocks_server <- function(
           value_raw  = value_raw
         )
       
-      res <- dplyr::bind_rows(base, proj)
+      # IMPORTANT: DEDUP AVANT complete() (sinon -100% + vrai %)
+      res <- dplyr::bind_rows(base, proj) %>%
+        dplyr::mutate(
+          Item_display = as.character(Item_display),
+          unit_kind    = as.character(unit_kind),
+          serie_code   = as.character(serie_code)
+        ) %>%
+        dplyr::group_by(Item_display, unit_kind, serie_code) %>%
+        dplyr::summarise(
+          value_raw = sum(value_raw, na.rm = TRUE),
+          .groups = "drop"
+        )
       
-      scen_allowed <- scen_levels_effective()
-      
-      res %>%
-        dplyr::filter(serie_code %in% scen_allowed) %>%
+      # Imputation des scénarios manquants => 0 (et flag is_imputed)
+      res2 <- res %>%
+        dplyr::mutate(
+          serie_code   = as.character(serie_code),
+          Item_display = as.character(Item_display),
+          unit_kind    = as.character(unit_kind)
+        ) %>%
+        tidyr::complete(
+          Item_display,
+          unit_kind,
+          serie_code = scen_allowed
+        ) %>%
+        dplyr::group_by(Item_display, unit_kind, serie_code) %>%
+        dplyr::summarise(
+          present_any = any(!is.na(value_raw)),
+          value_raw   = sum(value_raw, na.rm = TRUE),
+          .groups = "drop"
+        ) %>%
+        dplyr::mutate(
+          is_imputed = !present_any,
+          value_raw  = dplyr::if_else(is_imputed, 0, value_raw)
+        ) %>%
+        # >>> FIX UNIT_KIND: force ruminants in TLU, others in HEADS <<<
+        dplyr::mutate(
+          unit_kind = dplyr::if_else(Item_display %in% TLU_ITEMS_DISPLAY, "tlu", "heads")
+        ) %>%
         dplyr::mutate(
           serie_f = factor(serie_code, levels = scen_allowed)
         ) %>%
         dplyr::arrange(Item_display, serie_f)
+      
+      
+      res2
     }) %>% shiny::bindCache(cache_key())
     
     # --- 3) Liste des espèces (ordre fixe) ---------------------------------
@@ -316,7 +347,6 @@ mod_livestock_stocks_server <- function(
       d <- df_compact()
       if (nrow(d) == 0) return(character(0))
       
-      # "Dairy sheep and goats" removed on purpose
       wanted <- c(
         "Beef cattle",
         "Dairy cattle",
@@ -335,29 +365,17 @@ mod_livestock_stocks_server <- function(
     
     # helper for card titles with unit
     item_title <- function(sp) {
-      if (sp %in% TLU_ITEMS_DISPLAY) {
-        paste0(sp, " (TLU)")
-      } else {
-        paste0(sp, " (head)")
-      }
+      if (sp %in% TLU_ITEMS_DISPLAY) paste0(sp, " (TLU)") else paste0(sp, " (head)")
     }
     
     # --- 4) UI : cartes en grille, 3 par ligne ------------------------------
     output$plots_grid <- renderUI({
       it <- items()
       if (length(it) == 0) {
-        d0 <- prep_df()
-        sm <- function(v) paste(unique(utils::head(v, 6)), collapse = ", ")
         return(
           div(
             class = "alert alert-warning",
-            strong("No livestock data for the selected country."),
-            if (nrow(d0) > 0) p(tags$small(
-              paste0(
-                "Sample — Item_display: [", sm(d0$Item_display),
-                "] ; Scenario: [", sm(d0$Scenario), "]"
-              )
-            ))
+            strong("No livestock data for the selected country.")
           )
         )
       }
@@ -392,11 +410,7 @@ mod_livestock_stocks_server <- function(
       it    <- items()
       if (nrow(d_all) == 0 || length(it) == 0) return(invisible())
       
-      scen_allowed <- scen_levels_effective()
-      present      <- unique(as.character(d_all$serie_code))
-      series_lvls  <- scen_allowed[scen_allowed %in% present]
-      if (!length(series_lvls)) series_lvls <- present
-      
+      series_lvls <- scen_levels_effective()
       pal <- scenario_palette(levels = series_lvls)
       
       b <- scen_base()
@@ -412,61 +426,90 @@ mod_livestock_stocks_server <- function(
         specie   <- sp
         plotname <- paste0("plot_", gsub("[^a-zA-Z0-9]+", "_", tolower(specie)))
         
-        df_sp <- d_all %>%
+        df0 <- d_all %>%
           dplyr::filter(Item_display == specie) %>%
           dplyr::left_join(base_tbl, by = "Item_display") %>%
           dplyr::mutate(
-            serie_f = factor(as.character(serie_code), levels = series_lvls),
-            is_pig  = is_pig_item_raw(Item_display),
-            is_tlu  = (unit_kind == "tlu"),
-            
-            # Scaling for display:
-            # - TLU already in "1000TLU" => keep as-is
-            # - Pigs in thousand heads
-            # - Others in million heads
-            scale_factor = dplyr::case_when(
-              is_tlu ~ 1,
-              is_pig ~ 1/1000,
-              TRUE   ~ 1/1e6
-            ),
-            
-            axis_lab = dplyr::case_when(
-              is_tlu ~ "1000 TLU",
-              is_pig ~ "thousand heads",
-              TRUE   ~ "million heads"
-            ),
-            
-            y_suffix = dplyr::case_when(
-              is_tlu ~ "",
-              is_pig ~ " k",
-              TRUE   ~ " M"
-            ),
+            serie_code_chr = as.character(serie_code),
+            show_pct       = serie_code_chr %in% SHOW_PCT_CODES
+          )
+        
+        # --- échelle (une seule fois par espèce) ---
+        is_pig_spec <- is_pig_item_raw(specie)
+        is_tlu_spec <- any(df0$unit_kind == "tlu")
+        
+        scale_factor <- dplyr::case_when(
+          is_tlu_spec ~ 1,
+          is_pig_spec ~ 1/1000,
+          TRUE        ~ 1/1e6
+        )
+        
+        axis_lab <- dplyr::case_when(
+          is_tlu_spec ~ "1000 TLU",
+          is_pig_spec ~ "thousand heads",
+          TRUE        ~ "million heads"
+        )
+        
+        y_suffix <- dplyr::case_when(
+          is_tlu_spec ~ "",
+          is_pig_spec ~ " k",
+          TRUE        ~ " M"
+        )
+        
+        # base (référence) en unités "plot"
+        base_val_raw <- df0 %>%
+          dplyr::distinct(base_val) %>%
+          dplyr::pull(base_val)
+        base_val_raw <- base_val_raw[1]
+        base_plot_scalar <- base_val_raw * scale_factor
+        
+        # --- 1 ligne par scénario, puis calculs ---
+        df_sp <- df0 %>%
+          dplyr::group_by(serie_code_chr) %>%
+          dplyr::summarise(
+            value_raw = sum(value_raw, na.rm = TRUE),
+            show_pct  = dplyr::first(show_pct),
+            # si mélange imputé/non-imputé : on considère NON imputé
+            is_imputed = base::all(is_imputed),
+            .groups = "drop"
+          ) %>%
+          dplyr::mutate(
+            serie_f = factor(serie_code_chr, levels = series_lvls),
             
             value_plot = value_raw * scale_factor,
-            base_plot  = base_val  * scale_factor,
+            base_plot  = base_plot_scalar,
             
-            delta_pct  = dplyr::if_else(
+            delta_pct = dplyr::if_else(
               is.finite(base_plot) & base_plot > 0,
               100 * (value_plot / base_plot - 1),
               NA_real_
             ),
             
-            show_pct = as.character(serie_code) %in% SHOW_PCT_CODES,
+            lbl = dplyr::case_when(
+              # baseline : rien
+              serie_code_chr == b ~ "",
+              
+              !show_pct ~ "",
+              
+              # scénario affiché mais absent de fact -> imputé à 0
+              is_imputed & is.finite(base_plot) & base_plot > 0 ~ "-100%",
+              
+              # sinon on n'affiche pas de label si barre à 0 (évite du texte au pied)
+              value_plot <= 0 ~ "",
+              
+              is.finite(delta_pct) ~ paste0(
+                dplyr::if_else(delta_pct > 0, "+", ""),
+                scales::number(delta_pct, accuracy = 1, big.mark = " ", decimal.mark = "."),
+                "%"
+              ),
+              
+              TRUE ~ ""
+            ),
             
-            lbl = dplyr::if_else(
-              as.character(serie_code) == b | !show_pct,
-              "",
-              dplyr::if_else(
-                is.finite(delta_pct),
-                paste0(
-                  dplyr::if_else(delta_pct > 0, "+", ""),
-                  scales::number(delta_pct, accuracy = 1, big.mark = " ", decimal.mark = "."),
-                  "%"
-                ),
-                ""
-              )
-            )
+            axis_lab = axis_lab,
+            y_suffix = y_suffix
           )
+        
         
         unit_label <- unique(df_sp$axis_lab)
         if (length(unit_label) != 1L) unit_label <- unit_label[1L]
@@ -492,7 +535,7 @@ mod_livestock_stocks_server <- function(
               position = ggplot2::position_nudge(y = gap),
               vjust = 0, size = 3, lineheight = 0.95
             ) +
-            ggplot2::scale_x_discrete(labels = function(x) scenario_label_vec(x)) +
+            ggplot2::scale_x_discrete(labels = function(x) rep("", length(x))) +
             ggplot2::scale_y_continuous(
               limits = c(0, ymax + ypad),
               labels = scales::label_number(
@@ -506,18 +549,33 @@ mod_livestock_stocks_server <- function(
             ggplot2::theme_minimal(base_size = 8) +
             ggplot2::theme(
               legend.position = "none",
-              axis.text.x = ggplot2::element_text(hjust = 0.5),
+              axis.text.x  = ggplot2::element_blank(),
+              axis.ticks.x = ggplot2::element_blank(),
               axis.title.y = ggplot2::element_text(margin = ggplot2::margin(r = 10)),
               plot.margin = grid::unit(c(4, 24, 12, 40), "pt"),
               panel.background = ggplot2::element_rect(fill = NA, colour = NA),
               plot.background  = ggplot2::element_rect(fill = NA, colour = NA)
             ) +
-            ggplot2::scale_fill_manual(values = pal[levels(df_sp$serie_f)])
+            ggplot2::scale_fill_manual(
+              values = pal[levels(df_sp$serie_f)],
+              drop   = FALSE
+            )
           
           pl <- plotly::ggplotly(p, tooltip = c("x", "y"))
           
+          # >>> FIX: remove the spurious text shown at the base of bars <<<
+          # ggplotly can inject 'text' into bar traces; ensure bar traces never display text.
+          for (i in seq_along(pl$x$data)) {
+            if (isTRUE(pl$x$data[[i]]$type %in% c("bar"))) {
+              pl$x$data[[i]]$text <- NULL
+              pl$x$data[[i]]$texttemplate <- NULL
+              pl$x$data[[i]]$textposition <- "none"
+            }
+          }
+          
           pl <- plotly::layout(
             pl,
+            showlegend = FALSE,
             paper_bgcolor = "rgba(0,0,0,0)",
             plot_bgcolor  = "rgba(0,0,0,0)",
             margin = list(l = 40, r = 24, b = 36, t = 8, pad = 0)
@@ -560,9 +618,9 @@ mod_livestock_stocks_server <- function(
             is_tlu = (unit_kind == "tlu"),
             
             scale_factor = dplyr::case_when(
-              is_tlu ~ 1,          # already in 1000TLU
-              is_pig ~ 1/1000,     # thousand heads
-              TRUE   ~ 1/1e6       # million heads
+              is_tlu ~ 1,
+              is_pig ~ 1/1000,
+              TRUE   ~ 1/1e6
             ),
             
             Unit_display = dplyr::case_when(
@@ -580,7 +638,8 @@ mod_livestock_stocks_server <- function(
             Scenario_code  = as.character(serie_code),
             Scenario_label = scenario_label_vec(serie_code),
             Value          = Value_display,
-            Unit           = Unit_display
+            Unit           = Unit_display,
+            Is_imputed     = is_imputed
           )
         
         readr::write_delim(out, file, delim = ";")
@@ -594,11 +653,11 @@ mod_livestock_stocks_server <- function(
       
       txt <- glue::glue(
         "<p>
-        This set of charts shows, for the selected country, the livestock indicator in the <strong>baseline</strong> and under the selected scenarios.<br>
-        For <strong>Beef cattle</strong>, <strong>Dairy cattle</strong> and <strong>Sheep and goats meat</strong>, values are taken from <strong>LSU</strong> and shown in <strong>1000 TLU</strong>.<br>
-        For the other species groups, values are shown as <strong>number of heads</strong> (in <strong>million heads</strong>, and <strong>thousand heads</strong> for pigs when needed).<br>
-        The percentage labels above the bars indicate the change compared with the baseline for each scenario.
-        </p>"
+    This set of charts shows, for the selected country, the stock of animals by species in the base year and under the selected scenarios.<br>
+    For <strong>Beef cattle</strong>, <strong>Dairy cattle</strong> and <strong>Sheep and goats meat</strong>, values are taken in <strong>TLU</strong> (Tropical Livestock Unit) and displayed in <strong>1000 TLU</strong>.<br>
+    For the other species groups, values are shown as <strong>number of heads</strong> (in million heads, and thousand heads for pigs when needed).<br>
+    The percentage labels above the bars indicate the change compared with the baseline for each scenario.
+    </p>"
       )
       htmltools::HTML(txt)
     })

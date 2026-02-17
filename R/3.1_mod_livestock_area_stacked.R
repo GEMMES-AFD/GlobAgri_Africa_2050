@@ -1,24 +1,5 @@
 # R/3.1_mod_livestock_area_stacked.R
 # ---------------------------------------------------------------
-# Surfaces d’élevage (Element == "Area") — empilé par scénario
-# Items tracés : Dairy / Beef cattle / Meat sheep and goats
-# Style harmonisé avec le module "Harvested" (R/12_stacked)
-#
-# SCENARIO RULES (project-wide):
-# - Le module NE reconstruit aucune logique locale de scénarios (pas de fallback, pas de contrainte/extra calculée ici).
-# - Il affiche exactement r_scenarios() (CODES fact$Scenario), intersecté avec les scénarios réellement présents dans fact
-#   pour le pays/élément (via years_by_scenario()).
-# - Ordre stable via SCENARIO_LEVELS_DEFAULT (codes) + append déterministe des codes inconnus.
-# - Affichage: scenario_label(code) uniquement (axes, cartes KPI, hover).
-# ---------------------------------------------------------------
-
-suppressPackageStartupMessages({
-  library(shiny)
-  library(dplyr)
-  library(stringr)
-  library(plotly)
-  library(scales)
-})
 
 mod_livestock_area_stacked_ui <- function(id, height = "520px", full_width = TRUE){
   ns <- NS(id)
@@ -28,7 +9,7 @@ mod_livestock_area_stacked_ui <- function(id, height = "520px", full_width = TRU
     div(
       class = "card-body",
       
-      h2(class = "card-title", "Area allocated to livestock activity (in hectares)"),
+      h2(class = "card-title", "Area allocated to livestock activity (in million hectares)"),
       
       plotly::plotlyOutput(ns("stack_ls"), height = "420px", width = "100%"),
       
@@ -91,9 +72,24 @@ mod_livestock_area_stacked_server <- function(
       vapply(x, scenario_label, character(1))
     }
     
+    # --- Display labels for items (ONLY UI) --------------------------------
+    ITEM_LABELS_LS_AREA <- c(
+      "Dairy"               = "Dairy",
+      "Beef cattle"         = "Beef cattle",
+      "Meat sheep and goats"= "Small meat ruminant"
+    )
+    
+    item_label <- function(x){
+      x <- as.character(x)
+      out <- unname(ITEM_LABELS_LS_AREA[x])
+      ifelse(is.na(out) | out == "", x, out)
+    }
+    
     # --- Palette ------------------------------------------------------------
     livestock_colors_for <- function(items){
-      if (exists("pal_livestock", mode = "function", inherits = TRUE)) {
+      if (exists("emissions_animal_colors_for", mode = "function", inherits = TRUE)) {
+        unname(emissions_animal_colors_for(items))
+      } else if (exists("pal_livestock", mode = "function", inherits = TRUE)) {
         unname(pal_livestock(items))
       } else if (exists("pal_crops", mode = "function", inherits = TRUE)) {
         unname(pal_crops(items))
@@ -134,100 +130,147 @@ mod_livestock_area_stacked_server <- function(
       )
     })
     
-    # --- Années par scénario (intersection r_scenarios ∩ fact) -------------
+    # --- Années par scénario 
     years_by_scenario <- reactive({
       req(r_country())
       sc_req <- scen_codes_ordered()
       validate(need(length(sc_req) > 0, "No scenario selected."))
       
       dat <- fact %>%
-        filter(
+        dplyr::filter(
           Region == r_country(),
-          str_to_lower(str_trim(Element)) == str_to_lower(str_trim(element_name)),
+          stringr::str_to_lower(stringr::str_trim(Element)) ==
+            stringr::str_to_lower(stringr::str_trim(element_name)),
           Scenario %in% sc_req
         )
+
+      b <- baseline_code()
       
-      validate(need(nrow(dat) > 0, "No data available for this country/element."))
-      
-      # année max par scénario
-      yrs <- dat %>%
-        group_by(Scenario) %>%
-        summarise(
+      yrs_obs <- dat %>%
+        dplyr::group_by(Scenario) %>%
+        dplyr::summarise(
           year_used = suppressWarnings(max(Year[!is.na(Value)], na.rm = TRUE)),
           .groups = "drop"
         ) %>%
-        filter(is.finite(year_used))
+        dplyr::mutate(
+          Scenario_code = as.character(Scenario),
+          year_used = dplyr::if_else(is.finite(year_used), as.integer(year_used), NA_integer_)
+        ) %>%
+        dplyr::select(Scenario_code, year_used)
       
-      # Baseline: si 2018 est disponible et non-NA, on privilégie 2018
-      b <- baseline_code()
-      if (!is.na(b) && nzchar(b)) {
+      # Grille complète de tous les scénarios demandés
+      out <- tibble::tibble(Scenario_code = sc_req) %>%
+        dplyr::left_join(yrs_obs, by = "Scenario_code")
+      
+      # Baseline: si 2018 existe, forcer 2018
+      if (!is.na(b) && nzchar(b) && nrow(dat) > 0) {
         has_2018 <- any(dat$Scenario == b & dat$Year == 2018 & !is.na(dat$Value))
-        if (isTRUE(has_2018)) {
-          yrs$year_used[as.character(yrs$Scenario) == b] <- 2018
-        }
+        if (isTRUE(has_2018)) out$year_used[out$Scenario_code == b] <- 2018L
       }
       
-      yrs %>%
-        mutate(
-          Scenario_code = as.character(Scenario),
-          Scenario_f    = factor(Scenario_code, levels = scen_levels_all())
+      out %>%
+        dplyr::mutate(
+          Scenario_f = factor(Scenario_code, levels = scen_levels_all())
         ) %>%
-        arrange(Scenario_f) %>%
-        select(Scenario_code, year_used, Scenario_f)
+        dplyr::arrange(Scenario_f)
     }) %>% bindCache(cache_key_base())
+    
     
     # --- Données principales élevage ---------------------------------------
     data_ls <- reactive({
       yrs <- years_by_scenario()
       validate(need(nrow(yrs) > 0, "No scenario available for this country/element."))
       
-      dat0 <- fact %>%
-        inner_join(select(yrs, Scenario_code, year_used), by = c("Scenario" = "Scenario_code")) %>%
-        filter(
+      # Année cible par défaut si year_used est NA (cas scénario absent/0)
+      # On prend 2050 (ou le max global observé si tu préfères)
+      dat_all_el <- fact %>%
+        dplyr::filter(
           Region == r_country(),
-          str_to_lower(str_trim(Element)) == str_to_lower(str_trim(element_name)),
-          Year == year_used
+          stringr::str_to_lower(stringr::str_trim(Element)) ==
+            stringr::str_to_lower(stringr::str_trim(element_name)),
+          Scenario %in% yrs$Scenario_code
         )
       
-      # Multiplicateur automatique (si Unit = "1000 ha", etc.)
-      unit_vals <- unique(na.omit(dat0$Unit))
+      # Si on a des années observées quelque part, on peut utiliser le max global comme cible.
+      fallback_year <- suppressWarnings(max(dat_all_el$Year[!is.na(dat_all_el$Value)], na.rm = TRUE))
+      if (!is.finite(fallback_year)) fallback_year <- 2050L
+      
+      # (Option baseline déjà traitée dans years_by_scenario; ici on ne fait que remplir les NA)
+      yrs2 <- yrs %>%
+        dplyr::mutate(
+          year_used = dplyr::if_else(is.na(year_used), as.integer(fallback_year), as.integer(year_used))
+        )
+      
+      # Données brutes sur items_keep
+      dat0 <- fact %>%
+        dplyr::filter(
+          Region == r_country(),
+          stringr::str_to_lower(stringr::str_trim(Element)) ==
+            stringr::str_to_lower(stringr::str_trim(element_name)),
+          Scenario %in% yrs2$Scenario_code,
+          Item %in% items_keep
+        ) %>%
+        dplyr::inner_join(
+          dplyr::select(yrs2, Scenario_code, year_used),
+          by = c("Scenario" = "Scenario_code")
+        ) %>%
+        dplyr::filter(Year == year_used)
+      
+      # Unité + multiplicateur
+      unit_vals <- unique(stats::na.omit(dat0$Unit))
       mult_auto <- if (length(unit_vals) && any(grepl("1000", unit_vals, fixed = TRUE))) 1000 else 1
       mult <- if (is.null(value_multiplier)) mult_auto else value_multiplier
       
-      dat <- dat0 %>%
-        filter(Item %in% items_keep) %>%
-        group_by(Scenario, Item, year_used) %>%
-        summarise(value = sum(Value, na.rm = TRUE), .groups = "drop") %>%
-        mutate(
-          value = value * mult,
-          year  = year_used,
+      # Agrégation observée
+      dat_obs <- dat0 %>%
+        dplyr::group_by(Scenario, Item, year_used) %>%
+        dplyr::summarise(value = sum(Value, na.rm = TRUE), .groups = "drop") %>%
+        dplyr::mutate(
           Scenario_code = as.character(Scenario),
-          Scenario_f    = factor(Scenario_code, levels = scen_levels_all())
+          value = value * mult,
+          year  = year_used
         ) %>%
-        droplevels()
+        dplyr::select(Scenario_code, Item, year, value)
       
-      # Ordre des items = décroissant sur la baseline si elle existe, sinon sur total global
+      # Grille complète Scenario x Item (permet d'afficher même 0)
+      grid <- tidyr::expand_grid(
+        Scenario_code = yrs2$Scenario_code,
+        Item          = items_keep
+      ) %>%
+        dplyr::left_join(
+          dplyr::select(yrs2, Scenario_code, year_used, Scenario_f),
+          by = "Scenario_code"
+        ) %>%
+        dplyr::left_join(dat_obs, by = c("Scenario_code", "Item")) %>%
+        dplyr::mutate(
+          year  = dplyr::coalesce(year, year_used),
+          value = dplyr::coalesce(value, 0),
+          Scenario_f = factor(Scenario_code, levels = scen_levels_all())
+        )
+      
+      # Ordre des Items basé sur la baseline (ou sur total global si baseline absente)
       b <- baseline_code()
-      base_order <- dat %>%
-        {
-          if (!is.na(b) && any(.$Scenario_code == b)) {
-            filter(., Scenario_code == b)
-          } else {
-            .
-          }
-        } %>%
-        group_by(Item) %>%
-        summarise(tot = sum(value, na.rm = TRUE), .groups = "drop") %>%
-        arrange(desc(tot)) %>%
-        pull(Item)
+      base_order <- grid %>%
+        dplyr::group_by(Item) %>%
+        dplyr::summarise(
+          tot = sum(value[Scenario_code == b], na.rm = TRUE),
+          tot_all = sum(value, na.rm = TRUE),
+          .groups = "drop"
+        ) %>%
+        dplyr::mutate(rank_val = dplyr::if_else(is.finite(tot) & tot > 0, tot, tot_all)) %>%
+        dplyr::arrange(dplyr::desc(rank_val)) %>%
+        dplyr::pull(Item)
       
-      dat %>%
-        mutate(
+      grid %>%
+        dplyr::mutate(
           Item   = factor(Item, levels = base_order),
           scen_i = as.integer(Scenario_f),
-          scen_t = scenario_label_vec(Scenario_code)  # label UI
-        )
+          scen_t = scenario_label_vec(Scenario_code)
+        ) %>%
+        dplyr::arrange(Scenario_f, Item) %>%
+        droplevels()
     }) %>% bindCache(cache_key_base())
+    
     
     # --- KPI : totaux + deltas vs baseline ---------------------------------
     kpi_livestock <- reactive({
@@ -257,7 +300,6 @@ mod_livestock_area_stacked_server <- function(
       da <- data_ls()
       req(nrow(da) > 0)
       
-      # >>> THEME GLOBAL (R/99)
       th <- get_plotly_tokens()
       
       scen_codes_used <- levels(da$Scenario_f)
@@ -297,6 +339,8 @@ mod_livestock_area_stacked_server <- function(
         sub <- da %>% filter(Item == it)
         if (nrow(sub) == 0) next
         
+        it_lab <- item_label(it)
+        
         sub <- sub %>%
           mutate(
             hover_value = if_else(
@@ -314,14 +358,14 @@ mod_livestock_area_stacked_server <- function(
           data  = sub,
           x     = ~scen_i,
           y     = ~value,
-          name  = it,
-          legendgroup = it,
+          name  = it_lab,            # <<< display name only
+          legendgroup = it_lab,      # <<< display name only
           marker = list(color = col_it),
           text       = ~scen_t,
           textposition = "none",
           customdata = ~hover_value,
           hovertemplate = paste0(
-            "%{text}<br>", it, " : %{customdata} ha<extra></extra>"
+            "%{text}<br>", it_lab, " : %{customdata} ha<extra></extra>"
           )
         )
       }
@@ -395,7 +439,6 @@ mod_livestock_area_stacked_server <- function(
         }
         
         subline_base <- if (identical(sc_code, b)) {
-          # pas de texte pour la baseline
           p(class = "u-sub", htmltools::HTML("&nbsp;"))
         } else {
           p(class = "u-sub", "Vs base year: ", delta_tag)
@@ -446,19 +489,26 @@ mod_livestock_area_stacked_server <- function(
       
       htmltools::HTML(glue::glue(
         "<p>
-        This chart shows, for the selected country, the <strong>agricultural area used for livestock</strong>
-        in the base-year and under the selected scenarios.
-        Each stacked bar represents the total area (in hectares) allocated to livestock farming (pastures + meadows),
-        broken down into <strong>dairy</strong>, <strong>beef cattle</strong> and <strong>sheep and goats meat</strong>.
-        </p>
-        <p>
-        The cards below the chart summarise, for each scenario, the total area allocated to livestock farming (in hectares)
-        and its percentage change relative to the base-year.
-        </p>"
+  This chart shows, for the selected country, the <strong>agricultural area used for livestock</strong>
+  in the base-year and under the selected scenarios.
+  Each stacked bar represents the total area (in hectares) allocated to livestock farming (pastures + meadows),
+  broken down into <strong>dairy</strong>, <strong>beef cattle</strong> and <strong>small ruminants meat</strong>.
+  </p>
+  <p>
+  In this module:
+  <ul>
+    <li><strong>Dairy</strong> : refers to livestock raised primarily for milk production (dairy cows, dairy goats, dairy sheeps and related replacement stock).</li>
+    <li><strong>Beef cattle</strong> : refers to bovine livestock raised primarily for meat production (non-dairy cattle categories oriented toward beef production).</li>
+    <li><strong>Small ruminants meat</strong> : refers to sheep and goats raised primarily for meat production (small ruminant herds oriented toward meat).</li>
+  </ul>
+  </p>
+  <p>
+  The cards below the chart summarise, for each scenario, the total area allocated to livestock farming (in hectares)
+  and its percentage change relative to the base-year.
+  </p>"
       ))
     })
     
-    # Ne renvoie plus r_scenarios : la sélection est désormais globale.
     invisible(NULL)
   })
 }

@@ -2,11 +2,12 @@
 # -------------------------------------------------
 
 
-mod_food_dependency_balance_ui <- function(id, wrap_in_card = TRUE, height = "420px"){
+mod_food_dependency_balance_ui <- function(id, wrap_in_card = TRUE, height = "490px"){
   ns <- NS(id)
   
   content <- tagList(
     h2("Simplified balance by scenario (in million Gcal)"),
+    tags$br(),
     plotly::plotlyOutput(ns("plot"), height = height),
     
     div(
@@ -379,7 +380,7 @@ mod_food_dependency_balance_server <- function(
         legend = list(
           orientation = "h",
           x = 0.25, xanchor = "left",
-          y = 1.12, yanchor = "bottom",
+          y = 1.10, yanchor = "bottom",
           title = list(text = "")
         )
       )

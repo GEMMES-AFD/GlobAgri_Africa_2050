@@ -1,21 +1,11 @@
 # R/6.1_mod_dependancy_import_food_items.R
 # -------------------------------------------------
-# Dependency — Imports vs Food by item (kt/Mt tooltips) + FAO ratios (IDR, SSR)
-#
-# IMPORTANT (scenarios):
-# - This module does NOT rebuild any scenario logic.
-# - It only offers scenarios coming from r_scenarios() (codes in fact$Scenario),
-#   intersected with scenarios actually present in fact for the country + elements.
-# - It uses scenario_label(code) for UI display only.
-# - Scenario order is centralized via SCENARIO_LEVELS_DEFAULT (+ append deterministic unknown codes).
-# - Baseline scenario code comes ONLY from config: SCENARIO_BASE_YEAR_CODE.
-# -------------------------------------------------
 
 mod_dependancy_import_food_items_ui <- function(id, wrap_in_card = TRUE){
   ns <- NS(id)
   
   content <- tagList(
-    h3("Import dependency indicators by product (in tons)"),
+    h2("Import dependency indicators by product (in tons)"),
     
     # --- Ratio explainer cards (above the chart) ---
     div(
@@ -72,10 +62,9 @@ mod_dependancy_import_food_items_ui <- function(id, wrap_in_card = TRUE){
       class = "row",
       div(
         class = "col-sm-4",
-        tags$small("Indicator"),
         selectInput(
           ns("view_mode"),
-          label = NULL,
+          label = "Indicator :",
           choices = c(
             "Volumes (Imports vs Food, Mt)"         = "volumes",
             "Food dependency (Import / Food, %)"         = "ratio",
@@ -87,20 +76,18 @@ mod_dependancy_import_food_items_ui <- function(id, wrap_in_card = TRUE){
       ),
       div(
         class = "col-sm-4",
-        tags$small("Scenario"),
         selectInput(
           ns("scenario_sel"),
-          label = NULL,
+          label = "Scenario :",
           choices  = character(0),
           selected = NULL
         )
       ),
       div(
         class = "col-sm-4",
-        tags$small("Ranking"),
         selectInput(
           ns("rank_by"),
-          label = NULL,
+          label = "Ranking :",
           choices = c(
             "Rank by imports"      = "imports",
             "Rank by food"         = "food",
@@ -457,38 +444,26 @@ mod_dependancy_import_food_items_server <- function(id,
         scales::hue_pal()(1)
       }
       
-      
       if (view == "volumes") {
         
-        # Tooltip (volumes): show components + all ratios
-        df_tt <- df %>%
-          dplyr::mutate(
-            tooltip = paste0(
-              "Item: ", as.character(Item), "<br>",
-              "Production: ", fmt_qty_auto(prod_kt), "<br>",
-              "Imports: ",    fmt_qty_auto(import_kt), "<br>",
-              "Exports: ",    fmt_qty_auto(export_kt), "<br>",
-              "Food: ",       fmt_qty_auto(food_kt), "<br>",
-              "Import/Food: ", dplyr::if_else(is.finite(dep_share_pct), paste0(round(dep_share_pct, 1), "%"), "NA"), "<br>",
-              "IDR: ",         dplyr::if_else(is.finite(idr_pct),       paste0(round(idr_pct, 1), "%"), "NA"), "<br>",
-              "SSR: ",         dplyr::if_else(is.finite(ssr_pct),       paste0(round(ssr_pct, 1), "%"), "NA")
-            )
-          ) %>%
-          dplyr::select(Item, tooltip)
-        
+        # Tooltip STRICT: only what's used to build the bar (Imports vs Food)
         df_long <- df %>%
           dplyr::select(Item, import_kt, food_kt) %>%
           tidyr::pivot_longer(
-            cols = c(import_kt, food_kt),
-            names_to = "Flow",
+            cols      = c(import_kt, food_kt),
+            names_to  = "Flow",
             values_to = "kt"
           ) %>%
           dplyr::mutate(
             Value_Mt = kt / 1000, # kt -> Mt for axis/plot
-            Flow  = dplyr::recode(Flow, import_kt = "Imports", food_kt = "Food"),
-            Flow  = factor(Flow, levels = c("Imports", "Food"))
-          ) %>%
-          dplyr::left_join(df_tt, by = "Item")
+            Flow     = dplyr::recode(Flow, import_kt = "Imports", food_kt = "Food"),
+            Flow     = factor(Flow, levels = c("Imports", "Food")),
+            tooltip  = paste0(
+              "Item: ", as.character(Item), "<br>",
+              "Flow: ", as.character(Flow), "<br>",
+              "Value: ", fmt_qty_auto(kt)
+            )
+          )
         
         col_imports <- get_flow_color("Imports")
         col_food    <- get_flow_color("Food")
@@ -496,8 +471,8 @@ mod_dependancy_import_food_items_server <- function(id,
         gg <- ggplot2::ggplot(
           df_long,
           ggplot2::aes(
-            x = Item,
-            y = Value_Mt,
+            x    = Item,
+            y    = Value_Mt,
             fill = Flow,
             text = tooltip
           )
@@ -545,6 +520,9 @@ mod_dependancy_import_food_items_server <- function(id,
           xaxis = list(categoryorder = "array", categoryarray = levels(df_long$Item))
         )
         
+        # Remove Plotly "extra" box line
+        p <- plotly::style(p, hovertemplate = "%{text}<extra></extra>")
+        
       } else {
         
         metric_col <- dplyr::case_when(
@@ -561,44 +539,40 @@ mod_dependancy_import_food_items_server <- function(id,
           TRUE            ~ "Dependency share (Import / Food, %)"
         )
         
+        # Tooltip STRICT: only what's used to build the metric bar
         df_metric <- df %>%
           dplyr::mutate(
             metric = .data[[metric_col]],
-            lbl    = dplyr::if_else(is.finite(metric), paste0(round(metric), "%"), NA_character_)
-          )
-        req(any(is.finite(df_metric$metric)))
-        
-        # Tooltip: show only relevant components for the metric
-        df_metric <- df_metric %>%
-          dplyr::mutate(
+            lbl    = dplyr::if_else(is.finite(metric), paste0(round(metric), "%"), NA_character_),
             tooltip = dplyr::case_when(
               view == "ratio" ~ paste0(
                 "Item: ", as.character(Item), "<br>",
                 "Imports: ", fmt_qty_auto(import_kt), "<br>",
                 "Food: ",    fmt_qty_auto(food_kt), "<br>",
-                "Import/Food: ", dplyr::if_else(is.finite(dep_share_pct), paste0(round(dep_share_pct, 1), "%"), "NA")
+                "Import / Food: ",
+                dplyr::if_else(is.finite(dep_share_pct), paste0(round(dep_share_pct, 1), "%"), "NA")
               ),
               view == "idr" ~ paste0(
                 "Item: ", as.character(Item), "<br>",
-                "Production: ", fmt_qty_auto(prod_kt), "<br>",
-                "Imports: ",    fmt_qty_auto(import_kt), "<br>",
-                "Exports: ",    fmt_qty_auto(export_kt), "<br>",
+                "Imports: ", fmt_qty_auto(import_kt), "<br>",
                 "Domestic supply (Prod + Imp − Exp): ",
                 dplyr::if_else(is.finite(dom_supply_kt), fmt_qty_auto(dom_supply_kt), "NA"), "<br>",
-                "IDR: ", dplyr::if_else(is.finite(idr_pct), paste0(round(idr_pct, 1), "%"), "NA")
+                "IDR: ",
+                dplyr::if_else(is.finite(idr_pct), paste0(round(idr_pct, 1), "%"), "NA")
               ),
               view == "ssr" ~ paste0(
                 "Item: ", as.character(Item), "<br>",
                 "Production: ", fmt_qty_auto(prod_kt), "<br>",
-                "Imports: ",    fmt_qty_auto(import_kt), "<br>",
-                "Exports: ",    fmt_qty_auto(export_kt), "<br>",
                 "Domestic supply (Prod + Imp − Exp): ",
                 dplyr::if_else(is.finite(dom_supply_kt), fmt_qty_auto(dom_supply_kt), "NA"), "<br>",
-                "SSR: ", dplyr::if_else(is.finite(ssr_pct), paste0(round(ssr_pct, 1), "%"), "NA")
+                "SSR: ",
+                dplyr::if_else(is.finite(ssr_pct), paste0(round(ssr_pct, 1), "%"), "NA")
               ),
               TRUE ~ paste0("Item: ", as.character(Item))
             )
           )
+        
+        req(any(is.finite(df_metric$metric)))
         
         col_main <- unname(get_flow_color("Imports"))[1]
         label_nudge <- 0.03 * max(df_metric$metric, na.rm = TRUE)
@@ -606,8 +580,8 @@ mod_dependancy_import_food_items_server <- function(id,
         gg <- ggplot2::ggplot(
           df_metric,
           ggplot2::aes(
-            x = Item,
-            y = metric,
+            x    = Item,
+            y    = metric,
             text = tooltip
           )
         ) +
@@ -648,6 +622,9 @@ mod_dependancy_import_food_items_server <- function(id,
           p,
           xaxis = list(categoryorder = "array", categoryarray = levels(df_metric$Item))
         )
+        
+        # Remove Plotly "extra" box line
+        p <- plotly::style(p, hovertemplate = "%{text}<extra></extra>")
       }
       
       # Marges + thème plotly indexé R/99
@@ -692,29 +669,61 @@ mod_dependancy_import_food_items_server <- function(id,
       df_all <- data_items()
       if (is.null(df_all) || nrow(df_all) == 0) return(NULL)
       
-      yr    <- year_for_scenario()
-      sc    <- input$scenario_sel %||% ""
+      yr     <- year_for_scenario()
+      sc     <- input$scenario_sel %||% ""
       sc_lbl <- if (nzchar(sc)) scenario_label(sc) else ""
-      top_n <- input$top_n %||% 15
-      rk    <- input$rank_by %||% "imports"
-      view  <- input$view_mode %||% "volumes"
+      top_n  <- input$top_n %||% 15
+      rk     <- input$rank_by %||% "imports"
+      view   <- input$view_mode %||% "volumes"
       
       rk_txt <- dplyr::case_when(
         rk == "imports"     ~ "imports (Import Quantity)",
         rk == "food"        ~ "food quantities (Food)",
         rk == "production"  ~ "production (Production)",
-        rk == "ratio"       ~ "Import/Food dependency",
-        rk == "idr"         ~ "IDR",
-        rk == "ssr"         ~ "SSR",
+        rk == "ratio"       ~ "Food dependency (Import / Food, %)",
+        rk == "idr"         ~ "Import Dependency Ratio (IDR, %)",
+        rk == "ssr"         ~ "Self-Sufficiency Ratio (SSR, %)",
         TRUE                ~ "imports (Import Quantity)"
       )
       
+      what_txt <- dplyr::case_when(
+        view == "volumes" ~ paste0(
+          "The chart compares, for each product item, <strong>Imports</strong> and <strong>Food use</strong> (in physical quantities). ",
+          "Each item is displayed with two side-by-side bars: one for <strong>Imports</strong> and one for <strong>Food</strong>."
+        ),
+        view == "ratio" ~ paste0(
+          "The chart shows the <strong>Food dependency</strong> by item, defined as ",
+          "<strong>Import / Food × 100</strong>. ",
+          "Items with <strong>Food = 0</strong> are excluded because the ratio is not defined."
+        ),
+        view == "idr" ~ paste0(
+          "The chart shows the <strong>Import Dependency Ratio (IDR)</strong> by item, defined as ",
+          "<strong>Imports × 100 / (Production + Imports − Exports)</strong>. ",
+          "The denominator is a proxy for <strong>domestic supply</strong>."
+        ),
+        view == "ssr" ~ paste0(
+          "The chart shows the <strong>Self-Sufficiency Ratio (SSR)</strong> by item, defined as ",
+          "<strong>Production × 100 / (Production + Imports − Exports)</strong>. ",
+          "It uses the same domestic supply proxy as IDR."
+        ),
+        TRUE ~ ""
+      )
+      
+      unit_txt <- if (view == "volumes") {
+        "Quantities are plotted in <strong>million tonnes (Mt)</strong>. Tooltips automatically display <strong>kt</strong> or <strong>Mt</strong> depending on magnitude."
+      } else {
+        "Values are plotted in <strong>%</strong> (ratios). Tooltips show only the components required to compute the selected indicator."
+      }
+      
       txt <- glue::glue(
         "<p>
-        <strong>Scenario:</strong> <strong>{sc_lbl}</strong>.
-        <strong>Ranking:</strong> <strong>{rk_txt}</strong>; <strong>Top items:</strong> <strong>{top_n}</strong>.<br>
-        Tooltips display quantities in <strong>kt</strong> or <strong>Mt</strong> depending on magnitude, and show only the components relevant to the selected indicator.
-        </p>"
+      This figure reports import dependency indicators <strong>by product item</strong> for
+      <strong>{sc_lbl}</strong>.<br>
+      {what_txt}<br>
+      <strong>Top items:</strong> only the <strong>Top {top_n}</strong> items are displayed, based on the selected
+      <strong>Ranking</strong> criterion (<strong>{rk_txt}</strong>).<br>
+      {unit_txt}
+    </p>"
       )
       
       htmltools::HTML(txt)

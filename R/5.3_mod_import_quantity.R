@@ -1,4 +1,4 @@
-# R/5.1_mod_import_quantity.R
+# R/5.3_mod_import_quantity.R
 # -------------------------------------------------
 # Energy flows (item = "All") by scenario
 # - Single-flow view: 1 bar per scenario, dashed baseline (2018) + % change
@@ -9,30 +9,13 @@ mod_import_quantity_ui <- function(id, wrap_in_card = TRUE){
   ns <- NS(id)
   
   content <- tagList(
-    h3("Evolution of sources and uses in energy quantities (Gcal)"),
+    h2("Evolution of sources and uses in energy quantities (Gcal)"),
+    tags$div(style="height:8px"),
     div(
-      class = "u-row diet-cards",
-      
-      div(
-        class = "u-card u-card--flat diet-card",
-        div(
-          class = "diet-card-text",
-          "In the 'same diet,' 'healthy diet' and 'likely diet' scenarios, import shares by product stay constant compared to the base year (2018) 
-          and export shares constant at the global level. The quantitative changes in imports and exports are then mainly due to the change in the structure 
-          of the diet and the acceptance of more or less imported products in the base-year. In other words, in these three scenarios, trade doesn't play an 
-          adjustment role but is responsive to changes in composition and quantity."
-        )
-      )
-    ),
-    tags$br(),
-    
-    div(
-      class = "row",
-      div(
-        class = "col-sm-6",
+      class = "u-controls",
         selectInput(
           ns("view_mode"),
-          label = "",
+          label = "Flow considered",
           choices = c(
             "Imports"                   = "imports",
             "Domestic supply"           = "domestic",
@@ -46,7 +29,6 @@ mod_import_quantity_ui <- function(id, wrap_in_card = TRUE){
           ),
           selected = "imports"
         )
-      )
     ),
     
     plotly::plotlyOutput(ns("plot"), height = "auto"),
@@ -412,11 +394,11 @@ mod_import_quantity_server <- function(
       txt <- glue::glue(
         "<p>
         This chart shows how <strong>{nice_flow}</strong> evolves for the selected country
-        between the <strong>2018 baseline</strong> and the different diet scenarios in
+        between the <strong>base year</strong> and the different diet scenarios in
         2050.<br>
         Each bar represents the yearly volume of this flow
         (in <strong>million {unit_label}</strong>). The dashed horizontal line marks the
-        2018 level, and the percentages above the bars indicate the change compared to
+        base year level, and the percentages above the bars indicate the change compared to
         this baseline.
         </p>"
       )

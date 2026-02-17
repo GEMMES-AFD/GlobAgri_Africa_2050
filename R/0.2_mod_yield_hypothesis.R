@@ -1,10 +1,4 @@
-# R/04_mod_yield_hypothesis.R
-# -------------------------------------------------
-# Crop yields (Element == "Yield") : 2018 vs 2050
-# - Moyenne par Item
-# - Conversion 1000 t/ha -> t/ha
-# - Affichage 2018 vs 2050 (barres groupées)
-# - Export CSV (wide) : Region, Item, 2018, 2050, Unite
+# R/0.2_mod_yield_hypothesis.R
 # -------------------------------------------------
 
 mod_yield_ui <- function(id, wrap_in_card = TRUE){
@@ -14,18 +8,6 @@ mod_yield_ui <- function(id, wrap_in_card = TRUE){
     
     # ---- Titre du module -------------------------------------------------
     h2("Crop yield assumptions"),
-    
-    div(
-      class = "u-row diet-cards",
-      div(
-        class = "u-card u-card--flat diet-card",
-        div(class = "diet-card-title"),
-        div(
-          class = "diet-card-text",
-          "Projected 2050 yields are computed in two steps. First, for each crop and country, we close 50% of the yield gap between the observed baseline yield in 2018 (FAOstat) and the 'maximum attainable yield' provided by Mueller et al. (2012). Second, the resulting yield is multiplied by a climate-change yield coefficient provided by Müller, C and al. (2014). Thus, 2050 yields combine an agronomic catch-up effect (partial closure of the yield gap) and the net effect of climate change relative to the 2018 baseline (more informations in the 'about' tab)."
-        )
-      )
-    ),
     
     # ---- Graphique principal --------------------------------------------
     plotly::plotlyOutput(ns("plot"), height = "auto"),
@@ -37,7 +19,10 @@ mod_yield_ui <- function(id, wrap_in_card = TRUE){
         ns("dl_csv"),
         label = tagList(shiny::icon("download"), "CSV")
       )
-    )
+    ),
+    
+    # ---- Note de bas de module (HTML) -----------------------------------
+    uiOutput(ns("note"))
   )
   
   if (isTRUE(wrap_in_card)) {
@@ -56,6 +41,20 @@ mod_yield_server <- function(
 ){
   moduleServer(id, function(input, output, session) {
     
+    # --- Note de base ------------------------------------------------------
+    output$note <- renderUI({
+      htmltools::HTML("
+        <p>
+          Projected 2050 yields are computed in two steps. First, for each crop and country, we close <strong>50%</strong> of the yield gap between
+          the observed baseline yield in <strong>2018</strong> (FAOstat) and the <em>maximum attainable yield</em> provided by Mueller et al. (2012).<br>
+          Second, the resulting yield is multiplied by a climate-change yield coefficient provided by Müller, C and al. (2014).<br>
+          Thus, 2050 yields combine an agronomic catch-up effect (partial closure of the yield gap)
+          and the net effect of climate change relative to the 2018 baseline
+          (more informations in the 'about' tab).
+        </p>
+      ")
+    })
+    
     # ---------------------------------------------------------------
     # 1. Données pour les rendements de cultures (Yield)
     # ---------------------------------------------------------------
@@ -71,13 +70,11 @@ mod_yield_server <- function(
         ) %>%
         dplyr::group_by(Item, Year) %>%
         dplyr::summarise(Value = mean(Value, na.rm = TRUE), .groups = "drop") %>%
-        # conversion 1000 t/ha -> t/ha
-        dplyr::mutate(Value = Value * 1000) %>%
+        dplyr::mutate(Value = Value * 1000) %>%  # 1000 t/ha -> t/ha
         dplyr::group_by(Item) %>%
         dplyr::filter(dplyr::n() == 2) %>%
         dplyr::ungroup() %>%
         { df_tmp <- .
-        # ordre des items = valeur 2050 décroissante
         ord <- df_tmp %>%
           dplyr::filter(Year == 2050) %>%
           dplyr::arrange(dplyr::desc(Value)) %>%
@@ -121,10 +118,8 @@ mod_yield_server <- function(
       df <- dat_plot()
       shiny::validate(shiny::need(nrow(df) > 0, "No data available (Yield 2018 and 2050)."))
       
-      # >>> THEME GLOBAL (R/99)
       th <- get_plotly_tokens()
       
-      # 2018 à gauche, 2050 à droite
       df <- df %>%
         dplyr::mutate(
           Year = factor(as.character(Year), levels = c("2018", "2050"))
@@ -133,7 +128,6 @@ mod_yield_server <- function(
       n_items <- dplyr::n_distinct(df$Item)
       h <- max(520, 32 * n_items + 260)
       
-      # Palette obligatoire 2018 / 2050
       shiny::validate(shiny::need(exists("PALETTE_YEARS", inherits = TRUE),
                                   "Palette 'PALETTE_YEARS' not loaded."))
       pal  <- get("PALETTE_YEARS", inherits = TRUE)
@@ -173,10 +167,8 @@ mod_yield_server <- function(
         bargap  = 0.35,
         legend  = list(
           orientation = "h",
-          x = 0.5,
-          xanchor = "center",
-          y = 1.05,
-          yanchor = "bottom",
+          x = 0.5, xanchor = "center",
+          y = 1.05, yanchor = "bottom",
           traceorder = "normal"
         ),
         xaxis   = list(
@@ -193,13 +185,9 @@ mod_yield_server <- function(
           showgrid = TRUE,
           dtick    = 5
         ),
-        margin  = list(
-          l = 80,  r = 40,
-          t = 80,  b = 120
-        )
+        margin  = list(l = 80, r = 40, t = 80, b = 120)
       )
       
-      # >>> applique le thème global R/99 (axes/legend/hover/grid)
       p <- plotly_apply_global_theme(p, bg = "transparent", grid = "y")
       p
     })

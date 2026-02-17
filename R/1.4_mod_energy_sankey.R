@@ -648,7 +648,7 @@ mod_energy_sankey_server <- function(
       
       htmltools::HTML(glue::glue(
         "<p>
-      This Sankey diagram shows, for the selected country and diet scenario,
+      This Sankey diagram shows, for the selected country and diet scenario (clickable frames),
       how <strong>total agri-food flows</strong> (crops and livestock combined)
       move through the system.
       Nodes and links aggregate all products into a single set of flows:

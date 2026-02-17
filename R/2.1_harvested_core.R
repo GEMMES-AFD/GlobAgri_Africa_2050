@@ -1,12 +1,5 @@
 # R/2.1_harvested_core.R
 # ---------------------------------------------------------------
-# Noyau commun pour les modules "harvested"
-# - NE décide PAS de l'affichage : il transmet les scénarios à afficher
-#   (depuis r_scenarios si fourni, sinon config)
-# - NE calcule PAS de statut missing/redundant
-# - Calcule years_by_scenario, data_harvested, data_harvested_groups
-#   uniquement pour les scénarios demandés
-# ---------------------------------------------------------------
 
 harvested_core <- function(
     fact,

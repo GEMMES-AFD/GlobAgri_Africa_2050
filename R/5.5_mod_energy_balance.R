@@ -1,24 +1,23 @@
-# R/5.3_mod_energy_balance.R
-# -------------------------------------------------
-# Energy balance by scenario
-#  - 2 bars per scenario:
-#      * "Sources"  = Production + Imports (+ possible balancing item)
-#      * "Uses"     = Exports + all internal uses
-#        (Food, Feed, Losses, Seed, Other uses, Unallocated/Residual)
-#  - Bars are shown as PERCENTAGES within each bar (Sources and Uses separately)
-#  - Checkboxes let you hide/show individual flows; percentages are always computed
-#    on the full bar (before filtering visible flows)
-#  - KPI cards show Sources/Uses (or Uses/Sources) computed on currently visible flows
+# R/5.5_mod_energy_balance.R
 # -------------------------------------------------
 
 mod_energy_balance_ui <- function(id, wrap_in_card = TRUE){
   ns <- NS(id)
   
   content <- tagList(
-    h2("Energy balance by scenario (in % of Gcal)"),
+    h2("Energy balance by scenario"),
+    tags$div(style="height:8px"),
     
     uiOutput(ns("elements_selector")),
+    
+    checkboxInput(
+      inputId = ns("show_abs"),
+      label   = "Show absolute values (Gcal)",
+      value   = FALSE
+    ),
+    
     plotly::plotlyOutput(ns("plot"), height = "390px"),
+    h2("Sources / Uses ratio"),
     uiOutput(ns("ratio_cards")),
     
     div(
@@ -48,6 +47,8 @@ mod_energy_balance_server <- function(
 ){
   moduleServer(id, function(input, output, session){
     ns <- session$ns
+    
+    `%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
     
     shiny::validate(
       shiny::need(exists("scenario_code", mode = "function"), "Missing scenario_code()."),
@@ -97,10 +98,7 @@ mod_energy_balance_server <- function(
     })
     
     # ------------------------------------------------------------------
-    # Stable scenario levels for THIS module:
-    # - global order: SCENARIO_LEVELS_DEFAULT
-    # - restricted to wanted (r_scenarios)
-    # - restricted to scenarios present in fact for this country & scope
+    # Stable scenario levels for THIS module
     # ------------------------------------------------------------------
     scen_levels_effective <- shiny::reactive({
       req(r_country())
@@ -128,7 +126,7 @@ mod_energy_balance_server <- function(
     }) %>% bindCache(r_country(), scen_show_key())
     
     # -------------------------------------------------
-    # 1. Données brutes énergie (pays + années) + scénarios effectifs
+    # 1. Données brutes énergie
     # -------------------------------------------------
     data_raw <- shiny::reactive({
       req(fact, r_country())
@@ -153,10 +151,7 @@ mod_energy_balance_server <- function(
     }) %>% bindCache(r_country(), scen_show_key())
     
     # -------------------------------------------------
-    # 2. Données préparées :
-    #    - agrégation par (Scenario, Group, Flow, Unit)
-    #    - ajout automatique d'un item d'équilibrage si Sources != Uses
-    #    - calcul des parts % par barre (avant filtrage UI)
+    # 2. Données préparées
     # -------------------------------------------------
     data_prepared <- shiny::reactive({
       df <- data_raw()
@@ -183,7 +178,6 @@ mod_energy_balance_server <- function(
         )
       
       # --- Ajout "Unallocated" (si absent) ou "Residual (balancing)" (si Unallocated existe déjà)
-      # Tolérance relative (évite de créer un résidu sur du bruit d'arrondi)
       tot <- df_sum %>%
         dplyr::group_by(Scenario, Unit) %>%
         dplyr::summarise(
@@ -212,7 +206,6 @@ mod_energy_balance_server <- function(
         df_sum <- dplyr::bind_rows(df_sum, balancing_rows)
       }
       
-      # Ordre de présentation : on garde l'ordre “connu” puis on ajoute les flux “extra”
       flow_order_known <- c(
         "Production", "Imports",
         "Exports",
@@ -238,8 +231,7 @@ mod_energy_balance_server <- function(
     }) %>% bindCache(r_country(), scen_show_key())
     
     # -------------------------------------------------
-    # 3. Liste des flux par groupe (dérivée des données préparées)
-    #    -> garantit que "Other uses (non-food)" et l'item d'équilibrage apparaissent
+    # 3. Liste des flux par groupe
     # -------------------------------------------------
     flow_lists <- shiny::reactive({
       df <- data_prepared()
@@ -336,56 +328,45 @@ mod_energy_balance_server <- function(
         dplyr::summarise(total = sum(Value, na.rm = TRUE), .groups = "drop") %>%
         tidyr::pivot_wider(names_from = Group, values_from = total) %>%
         dplyr::mutate(
-          ratio_SU = dplyr::if_else(!is.na(Sources) & !is.na(Uses) & Uses > 0,    100 * Sources / Uses, NA_real_),
-          ratio_US = dplyr::if_else(!is.na(Sources) & !is.na(Uses) & Sources > 0, 100 * Uses / Sources, NA_real_)
+          ratio_SU = dplyr::if_else(!is.na(Sources) & !is.na(Uses) & Uses > 0, 100 * Sources / Uses, NA_real_)
         )
     })
     
+    # >>> Cards fixed to Sources / Uses — no selector <<<
     output$ratio_cards <- shiny::renderUI({
       df <- ratio_data()
       if (is.null(df) || nrow(df) == 0) return(NULL)
       
-      mode <- input$ratio_mode
-      if (is.null(mode)) mode <- "SU"
+      ratio_label <- "Sources / Uses"
       
-      ratio_label <- if (mode == "US") "Uses / Sources" else "Sources / Uses"
-      
-      tagList(
-        selectInput(
-          inputId = ns("ratio_mode"),
-          label   = "Ratio displayed:",
-          choices = c("Sources / Uses" = "SU", "Uses / Sources" = "US"),
-          selected = mode
-        ),
+      div(
+        id    = ns("ratio_cards_root"),
+        class = "energy-kpi",
         div(
-          id    = ns("ratio_cards_root"),
-          class = "energy-kpi",
-          div(
-            class = "u-row",
-            lapply(seq_len(nrow(df)), function(i){
-              scen_code <- as.character(df$Scenario[i])
-              scen_lbl  <- scenario_label(scen_code)
-              
-              val <- if (mode == "US") df$ratio_US[i] else df$ratio_SU[i]
-              label_val <- if (is.na(val)) "—" else paste0(round(val), "%")
-              
+          class = "u-row",
+          lapply(seq_len(nrow(df)), function(i){
+            scen_code <- as.character(df$Scenario[i])
+            scen_lbl  <- scenario_label(scen_code)
+            
+            val <- df$ratio_SU[i]
+            label_val <- if (is.na(val)) "—" else paste0(round(val), "%")
+            
+            div(
+              class = "u-card u-card--flat u-card--hover",
               div(
-                class = "u-card u-card--flat u-card--hover",
-                div(
-                  class = "u-box",
-                  p(class = "u-title", scen_lbl),
-                  p(class = "u-value", label_val, tags$span(class = "u-unit", ratio_label)),
-                  p(class = "u-sub", "Based on currently visible flows")
-                )
+                class = "u-box",
+                p(class = "u-title", scen_lbl),
+                p(class = "u-value", label_val, tags$span(class = "u-unit", ratio_label)),
+                p(class = "u-sub", "Based on currently visible flows")
               )
-            }) |> do.call(what = tagList)
-          )
+            )
+          }) |> do.call(what = tagList)
         )
       )
     })
     
     # -------------------------------------------------
-    # 6. Graphique (2 barres en % par scénario)
+    # 6. Graphique (2 barres par scénario) : % ou absolu (million Gcal)
     # -------------------------------------------------
     output$plot <- plotly::renderPlotly({
       df_all <- data_prepared()
@@ -393,6 +374,8 @@ mod_energy_balance_server <- function(
       
       flows_selected <- r_flows_selected()
       if (length(flows_selected) == 0) return(NULL)
+      
+      show_abs <- isTRUE(input$show_abs)
       
       th <- if (exists("get_plotly_tokens", mode = "function")) get_plotly_tokens() else list(
         font_color       = "#111827",
@@ -436,23 +419,50 @@ mod_energy_balance_server <- function(
         dplyr::distinct(Scenario, scen_idx) %>%
         dplyr::arrange(scen_idx)
       
+      # Y mapping (ABS = million Gcal via Value_m)
+      y_col <- if (show_abs) "Value_m" else "Share"
+      y_lab <- if (show_abs) paste0("Value (million ", unit_label, ")") else "Share within each bar (%)"
+      
+      # Labels "Sources/Uses" : position FIXE (comme en %), indépendante des flux cochés
       labels_df <- df_all %>%
-        dplyr::distinct(Scenario, Group, scen_idx, x_pos) %>%
-        dplyr::mutate(label_y = 103)
+        dplyr::distinct(Scenario, Group, scen_idx, x_pos)
+      
+      if (show_abs) {
+        # y_max basé sur le total complet (tous flux), pour ne pas bouger quand on coche/décoche
+        bar_totals <- df_all %>%
+          dplyr::group_by(Scenario, Group) %>%
+          dplyr::summarise(total_m = sum(Value_m, na.rm = TRUE), .groups = "drop")
+        
+        y_max <- max(bar_totals$total_m, na.rm = TRUE)
+        if (!is.finite(y_max) || y_max <= 0) y_max <- 1
+        
+        labels_df <- labels_df %>% dplyr::mutate(label_y = y_max * 1.08)
+        y_limits <- c(0, y_max * 1.15)
+      } else {
+        labels_df <- labels_df %>% dplyr::mutate(label_y = 103)
+        y_limits <- c(0, 110)
+      }
+      
+      # Tooltip : on garde % + valeur en million Gcal
+      df <- df %>%
+        dplyr::mutate(
+          tooltip_text = paste0(
+            "Scenario: ", scenario_label(as.character(Scenario)), "<br>",
+            "Bar: ", as.character(Group), "<br>",
+            "Flow: ", as.character(Flow), "<br>",
+            "Share within bar: ", sprintf("%.0f%%", Share), "<br>",
+            "Value: ", scales::comma(Value_m, accuracy = 0.1), " million ", unit_label,
+            "<extra></extra>"
+          )
+        )
       
       gg <- ggplot2::ggplot(
         df,
         ggplot2::aes(
           x = x_pos,
-          y = Share,
+          y = .data[[y_col]],
           fill = Flow,
-          text = paste0(
-            "Scenario: ", scenario_label(as.character(Scenario)), "<br>",
-            "Bar: ", as.character(Group), "<br>",
-            "Flow: ", as.character(Flow), "<br>",
-            "Share within bar: ", sprintf("%.0f%%", Share), "<br>",
-            "Approx. volume: ", scales::comma(Value_m, accuracy = 0.1), " million ", unit_label
-          )
+          text = tooltip_text
         )
       ) +
         ggplot2::geom_col(width = bar_width) +
@@ -464,18 +474,28 @@ mod_energy_balance_server <- function(
           vjust = 0,
           colour = gg_txt
         ) +
-        ggplot2::scale_fill_manual(values = flow_colors) +
+        ggplot2::scale_fill_manual(values = flow_colors, name = NULL) +
         ggplot2::scale_x_continuous(
           breaks = scen_axis$scen_idx,
           labels = scenario_label(as.character(scen_axis$Scenario)),
           expand = ggplot2::expansion(mult = c(0.02, 0.02))
         ) +
-        ggplot2::scale_y_continuous(
-          labels = scales::label_percent(accuracy = 1, scale = 1),
-          limits = c(0, 110),
-          expand = ggplot2::expansion(mult = c(0, 0.05))
-        ) +
-        ggplot2::labs(x = NULL, y = "Share within each bar (%)") +
+        {
+          if (show_abs) {
+            ggplot2::scale_y_continuous(
+              labels = scales::label_number(accuracy = 0.1, big.mark = ","),
+              limits = y_limits,
+              expand = ggplot2::expansion(mult = c(0, 0.05))
+            )
+          } else {
+            ggplot2::scale_y_continuous(
+              labels = scales::label_percent(accuracy = 1, scale = 1),
+              limits = y_limits,
+              expand = ggplot2::expansion(mult = c(0, 0.05))
+            )
+          }
+        } +
+        ggplot2::labs(x = NULL, y = y_lab) +
         ggplot2::theme_minimal(base_size = 13) +
         ggplot2::theme(
           axis.text.x      = ggplot2::element_text(angle = 0, hjust = 0.5, vjust = 1, colour = gg_txt),
@@ -488,7 +508,18 @@ mod_energy_balance_server <- function(
         )
       
       p <- plotly::ggplotly(gg, tooltip = "text")
-      p <- plotly::layout(p, margin = list(l = 40, r = 20, t = 20, b = 60))
+      p <- plotly::layout(
+        p,
+        margin = list(l = 40, r = 20, t = 25, b = 40),
+        legend = list(
+          title = list(text = ""),
+          orientation = "h",
+          x = 0,12,
+          xanchor = "left",
+          y = 1.18,
+          yanchor = "top"
+        )
+      )
       
       if (exists("plotly_apply_global_theme", mode = "function")) {
         p <- plotly_apply_global_theme(p, bg = "transparent", grid = "y")
@@ -513,21 +544,26 @@ mod_energy_balance_server <- function(
     )
     
     # -------------------------------------------------
-    # 8. Note (inclut l’explication du balancing item)
+    # 8. Note
     # -------------------------------------------------
     output$note <- renderUI({
       df <- data_prepared()
       if (nrow(df) == 0) return(NULL)
       
       unit_label <- paste(unique(df$Unit), collapse = ", ")
-      
       has_balance <- any(as.character(df$Flow) %in% c("Unallocated", "Residual (balancing)"))
       
-      balance_txt <- if (isTRUE(has_balance)) {
-        "<br><em>Note:</em> When Sources and Uses do not match in the raw outputs, the module adds a small balancing item:
-        <strong>Unallocated</strong> (if absent in the model outputs) or <strong>Residual (balancing)</strong> (if an Unallocated flow already exists),
-        so that the full selection closes the balance (Sources ≈ Uses)."
-      } else ""
+      mode_txt <- if (isTRUE(input$show_abs)) {
+        paste0("Heights are expressed in <strong>million ", unit_label, "</strong> (absolute values).")
+      } else {
+        "Heights are expressed in <strong>percentages</strong> within each bar."
+      }
+      
+      hidden_txt <- if (isTRUE(input$show_abs)) {
+        "When you uncheck a flow in the list, its segment is hidden from the stacked bars."
+      } else {
+        "When you uncheck a flow in the list, its segment is hidden but the percentages still refer to the full bar."
+      }
       
       htmltools::HTML(glue::glue(
         "<p>
@@ -538,13 +574,11 @@ mod_energy_balance_server <- function(
           <li><strong>Uses</strong> (right): the share of <em>exports</em> and internal uses of energy within the agri-food system
               (food, feed, losses, seed, other non-food uses, etc.).</li>
         </ul>
-        Heights are expressed in <strong>percentages</strong> within each bar.
-        When you uncheck a flow in the list, its segment is hidden but the percentages still
-        refer to the full bar.<br>
-        The small cards below the chart indicate, for each scenario, a ratio between
-        <strong>Sources</strong> and <strong>Uses</strong>, based on the flows currently visible
-        in the chart. Volumes in the tooltips are given in <strong>million {unit_label}</strong>.
-        {balance_txt}
+        {mode_txt}<br>
+        {hidden_txt}<br>
+        The small cards below the chart indicate, for each scenario, the ratio
+        <strong>Sources / Uses</strong>, based on the flows currently visible in the chart.
+        Volumes in the tooltips are given in <strong>million {unit_label}</strong>.
         </p>"
       ))
     })

@@ -161,7 +161,9 @@ ui <- tagList(
       # --------- ONGLET 1 : Home page ----------
       tabPanel(
         "Home page",
-        htmltools::includeHTML("www/home_page.html")
+        div(class = "container-fluid",
+            home_ui("home")
+        )
       ),
       
       # --------- ONGLET 2 : HYPOTHESES ----------
@@ -172,10 +174,6 @@ ui <- tagList(
           h1(class = "section-title", "DIETS PROJECTIONS IN 2050"),
           tags$br(),
           mod_energy_items_ui("energy_hypo"),
-          conditionalPanel(
-            condition = "input['energy_hypo-show_protein_share']",
-            mod_protein_treemap_ui("protein_treemap")
-          ),
           tags$br(),
           tags$hr(class = "rule"),
           h1(class = "section-title", "CROPS AND LIVESTOCK PRODUCTIVITY ASSUMPTIONS"),
@@ -251,7 +249,7 @@ ui <- tagList(
             tags$hr(class = "rule"),
             h1(class = "section-title", "INPUT, PRODUCTION AND USES"),
             tags$br(),
-            mod_livestock_energy_share_ui("energy_share"),
+            mod_livestock_animal_products_prod_ui("animal_prod"),
             tags$br(),
             mod_ls_sankey_tonnes_ui("ls_sankey_tonnes")
         )
@@ -272,11 +270,18 @@ ui <- tagList(
         title = "Balance",
         div(
           class = "container-fluid",
-          h1(class = "section-title", "RESSOURCES AND USES QUANTITIES"),
+          h1(class = "section-title", "STRUCTURE OF FLOWS"),
+          tags$br(),
+          mod_crop_structure_ui("crop_structure"),
+          tags$br(),
+          mod_animal_items_structure_ui("animal_items_structure"),
+          tags$br(),
+          tags$hr(class = "rule"),
+          h1(class = "section-title", "QUANTITIES AND FLOWS"),
           tags$br(),
           mod_import_quantity_ui("trade_imports"),
           tags$br(),
-          mod_crop_structure_ui("crop_structure"),
+          mod_livestock_energy_share_ui("energy_share"),
           tags$br(),
           mod_energy_balance_ui("trade_balance"),
         )
@@ -287,7 +292,7 @@ ui <- tagList(
         title = "Dependency",
         div(
           class = "container-fluid",
-          h1(class = "section-title", "EMISSIONS QUANTITIES"),
+          h1(class = "section-title", "IMPORT DEPENDANCY"),
           mod_dependancy_import_food_items_ui("dep_import_food")
         )
       ),
@@ -297,7 +302,7 @@ ui <- tagList(
         title = "Emissions",
         value = "commerce",
         div(class = "container-fluid",
-            h1(class = "section-title", "ENERGY"),
+            h1(class = "section-title", "GHG EMISSIONS QUANTITIES"),
             tags$br(),
             mod_emissions_stacked_ui("emiss_stack"),
             tags$br(),
@@ -318,19 +323,7 @@ ui <- tagList(
       tabPanel(
         title = "About",
         value = "About",
-        div(class = "container-fluid",
-            shiny::includeHTML("www/about.html"),
-            tags$hr(class = "rule"),
-            div(class = "container-fluid",
-                h1("Download the full dataset"),
-                div(class = "u-actions",
-                    downloadLink("dl_fact_rds", label = tagList(icon("download"), "Data (.rds)")),
-                    downloadLink("dl_fact_csv", label = tagList(icon("download"), "Data (.csv)"))
-                )
-            ),
-            br(),
-            div(class = "about-doc", DT::dataTableOutput("tbl_assumptions"))
-        )
+        mod_about_ui("about")
       )
     )
   ),
@@ -394,11 +387,9 @@ server <- function(input, output, session){
       class = "extra-scenario-note",
       tags$em(
         paste0(
-          "The constraint is not reached; the additional scenario (",
+          "The constraint is not reached so the additional scenario (",
           extra_lbl,
-          ") is equivalent to the reference diet (",
-          ref_lbl,
-          "); therefore, it is not necessary to display it."
+          ") is equivalent to the likely diet. Therefore, it is not displayed."
         )
       )
     )
@@ -450,12 +441,14 @@ server <- function(input, output, session){
           else HTML(paste0("Increase vs 2018 : <b>", fmt0(delta_abs),
                            " hab.</b> (", fmt1(delta_pct), " %)"))
         ),
-        p(class = "kpi-sub",
-          if (is.na(dens50)) "Projected population density in 2050 : —"
-          else HTML(paste0("Projected population density in 2050 : <b>", fmt1(dens50), " hab./km²</b>"))
-        )
     )
   })
+  
+  # =======================
+  # ONGLET 0 — HOME
+  # ======================
+  
+  home_server("home")
   
   # =======================
   # ONGLET 1 — HYPOTHÈSES
@@ -475,12 +468,7 @@ server <- function(input, output, session){
   )
   
   mod_yield_server("yield_hypo", fact_reactive = reactive(fact), country_sel = r_country)
-  
-  mod_protein_treemap_server(
-    "protein_treemap",
-    fact = fact,
-    r_country = r_country
-  )
+
   
   # =======================
   # ONGLET 2 — RESUME
@@ -543,14 +531,7 @@ server <- function(input, output, session){
     r_scenarios = r_scenarios_effective,  
     group_var = "Item_group"
   )
-  
-  mod_crop_structure_server(
-    "crop_structure",
-    fact      = fact,
-    r_country = r_country,
-    r_scenarios = r_scenarios_effective,
-    group_var = "Item_group"
-  )
+
   
   mod_crop_sankey_tonnes_server(
     "crop_sankey",
@@ -598,12 +579,13 @@ server <- function(input, output, session){
     r_scenarios = r_scenarios_effective
   )
   
-  mod_livestock_energy_share_server(
-    id         = "energy_share",
-    fact       = fact,
-    r_country  = r_country,
-    r_scenarios = r_scenarios_effective
+  mod_livestock_animal_products_prod_server(
+    id         = "animal_prod",
+    fact       = fact,          
+    r_country  = r_country,      
+    r_scenarios = r_scenarios_effective   
   )
+  
   
   mod_ls_sankey_tonnes_server(
     "ls_sankey_tonnes",
@@ -626,13 +608,36 @@ server <- function(input, output, session){
   # =======================
   # ONGLET 6 - BALANCE
   # =======================
-  mod_import_quantity_server(
+ 
+  mod_crop_structure_server(
+    "crop_structure",
+    fact      = fact,
+    r_country = r_country,
+    r_scenarios = r_scenarios_effective,
+    group_var = "Item_group"
+  )
+  
+  mod_animal_items_structure_server(
+    id          = "animal_items_structure",
+    fact        = fact,
+    r_country   = r_country,
+    r_scenarios = r_scenarios_effective
+  )
+  
+   mod_import_quantity_server(
     "trade_imports",
     fact      = fact,
     r_country = r_country,
     r_scenarios = r_scenarios_effective
   )
   
+  mod_livestock_energy_share_server(
+    id         = "energy_share",
+    fact       = fact,
+    r_country  = r_country,
+    r_scenarios = r_scenarios_effective
+  )
+
   mod_energy_balance_server(
     "trade_balance",
     fact      = fact,
@@ -640,12 +645,16 @@ server <- function(input, output, session){
     r_scenarios = r_scenarios_effective
   )
   
-  mod_dependancy_import_food_items_server(
-    id = "dep_import_food",
-    fact = fact,
-    r_country = r_country,
-    r_scenarios = r_scenarios_effective
-  )
+  # =======================
+  # ONGLET 6 - DEPENDANCY
+  # =======================
+  
+mod_dependancy_import_food_items_server(
+  id = "dep_import_food",
+  fact = fact,
+  r_country = r_country,
+  r_scenarios = r_scenarios_effective
+)
   
   # =======================
   # ONGLET 7 - EMISSION
@@ -665,8 +674,12 @@ server <- function(input, output, session){
   )
   
   # =======================
-  # ONGLET 8 - À PROPOS
+  # ONGLET 8 - ABOUT
   # =======================
+  
+  mod_about_server("about", fact = fact)
+  
+  
   .get_fact <- function(x) if (is.function(x)) x() else x
   
   output$dl_fact_rds <- downloadHandler(

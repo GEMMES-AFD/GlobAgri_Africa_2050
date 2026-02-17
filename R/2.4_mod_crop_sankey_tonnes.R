@@ -1,19 +1,10 @@
 # R/2.4_mod_crop_sankey_tonnes.R
 # -------------------------------------------------------------------
 
-suppressPackageStartupMessages({
-  library(shiny)
-  library(dplyr)
-  library(tidyr)
-  library(plotly)
-  library(stringr)
-  library(scales)
-})
-
 # --- Groupes de produits végétaux -------------------------------------------
 CROP_GROUPS <- list(
   "All crop products" = c(
-    "Cake Other Oilcrops","Fibers etc.","Fruits and vegetables","Grass",
+    "Cake Other Oilcrops","Fibers etc.","Fruits and vegetables",
     "Maize","Millet and Sorghum","Oil Other Oilcrops","Oilpalm fruit",
     "Olive Oil","Olives","Other Oilcrops","Other cereals",
     "Other plant products","Other products","Palm Products Oil",
@@ -69,33 +60,27 @@ mod_crop_sankey_tonnes_ui <- function(id, plot_height = "500px"){
       class = "card",
       div(
         class = "card-body",
-        
-        # --- Filtres -----------------------------------------------------
-        div(
-          h2(textOutput(ns("title_flow"))),
-          tags$div(style="height:15px"),
-          tags$label("Product group", `for` = ns("prod_sel"), class = "form-label mb-1"),
-          selectInput(
-            ns("prod_sel"), NULL,
-            choices  = names(CROP_GROUPS),
-            selected = "All crop products",
-            width    = "220px"),
-          radioButtons(
-            ns("unit"),
-            label    = NULL,
-            choices  = c("Energy (Gcal)" = "energy", "Mass (tonnes)" = "mass"),
-            selected = "energy",
-            inline   = TRUE),
-          tags$div(style="height:15px")
-        ),
-      
-        # --- Titre + tuiles KPI -----------------------------------------
         h2(textOutput(ns("title_domestic"))),
-        tags$div(style="height:10px"),
+        tags$div(style="height:12px"),
+        tags$label("Select a product group :", `for` = ns("prod_sel"), class = "form-label mb-1"),
+        selectInput(
+          ns("prod_sel"), NULL,
+          choices  = names(CROP_GROUPS),
+          selected = "All crop products",
+          width    = "220px"
+        ),
+        radioButtons(
+          ns("unit"),
+          label    = NULL,
+          choices  = c("Energy (Gcal)" = "energy", "Mass (tonnes)" = "mass"),
+          selected = "energy",
+          inline   = TRUE
+        ),
+        tags$div(style="height:8px"),
+        h4(tags$em("(Click on the scenario box you want to see)")),
         uiOutput(ns("tiles")),
-        tags$div(style="height:15px"),
-        
-        # --- Toggle % -----------------------------------------
+        tags$div(style="height:20px"),
+        h2(textOutput(ns("title_flow"))),
         div(
           class = "d-flex gap-3 flex-wrap align-items-center",
           div(
@@ -109,7 +94,6 @@ mod_crop_sankey_tonnes_ui <- function(id, plot_height = "500px"){
           )
         ),
         
-        # --- Plot + export ----------------------------------------------
         plotly::plotlyOutput(ns("sankey"), height = plot_height),
         div(
           class = "text-right",
@@ -123,6 +107,7 @@ mod_crop_sankey_tonnes_ui <- function(id, plot_height = "500px"){
     )
   )
 }
+
 # ---------------------------------------------------------------------------
 # Server
 # ---------------------------------------------------------------------------
@@ -131,25 +116,22 @@ mod_crop_sankey_tonnes_server <- function(
     id,
     fact,
     r_country,
-    r_scenarios,         # reactive/function returning scenario CODES (fact$Scenario)
+    r_scenarios,
     harvest_element = "Area harvested",
     exclude_items = c(
       "All products","All crops","Agricultural land occupation (Farm)",
       "Cropland","Forest land","Land under perm. meadows and pastures"
     ),
-    value_multiplier = 1,            # applied to BOTH unit systems
-    value_multiplier_energy = 1,     # extra multiplier for energy if needed
+    value_multiplier = 1,
+    value_multiplier_energy = 1,
     group_var = NULL
 ){
   moduleServer(id, function(input, output, session){
     
-    # -----------------------------------------------------------------------
-    # Helpers
-    # -----------------------------------------------------------------------
     `%||%` <- function(a, b) if (is.null(a) || length(a)==0 || (is.numeric(a) && !is.finite(a))) b else a
     
     if (is.null(r_scenarios) || !is.function(r_scenarios)) {
-      stop("mod_crop_sankey_tonnes_server(): 'r_scenarios' must be provided as a reactive/function returning scenario CODES.")
+      stop("mod_crop_sankey_tonnes_server(): 'r_scenarios' must be a reactive/function returning scenario CODES.")
     }
     if (!exists("scenario_label", mode = "function", inherits = TRUE)) {
       stop("mod_crop_sankey_tonnes_server(): missing dependency 'scenario_label(code)'.")
@@ -158,22 +140,9 @@ mod_crop_sankey_tonnes_server <- function(
       stop("mod_crop_sankey_tonnes_server(): missing dependency 'SCENARIO_LEVELS_DEFAULT'.")
     }
     
-    scenario_label_vec <- function(x){
-      x <- as.character(x)
-      vapply(x, scenario_label, character(1))
-    }
-    
-    safe_id <- function(x){
-      x <- as.character(x)
-      x <- gsub("[^A-Za-z0-9_]+", "_", x)
-      x <- gsub("_+", "_", x)
-      x
-    }
-    
     if (!exists("APP_TRANSPARENT", inherits = TRUE)) {
       APP_TRANSPARENT <- "rgba(0,0,0,0)"
     }
-    
     if (!exists("plotly_theme_transparent", mode = "function")) {
       plotly_theme_transparent <- function(p = NULL){
         if (is.null(p)) return(NULL)
@@ -181,8 +150,10 @@ mod_crop_sankey_tonnes_server <- function(
       }
     }
     
-    # Domestic supply value as displayed by Sankey (same logic as make_sankey_data)
-    calc_ds_display <- function(P, M, E){
+    is_blank <- function(x) is.na(x) | trimws(x) == "" | trimws(x) == "NA"
+    
+    # Domestic supply from P/M/E (same plumbing)
+    calc_ds_from_pme <- function(P, M, E){
       P <- pmax(0, P); M <- pmax(0, M); E <- pmax(0, E)
       
       exp_from_prod    <- pmax(0, pmin(P, E))
@@ -190,57 +161,44 @@ mod_crop_sankey_tonnes_server <- function(
       to_dom_from_prod <- pmax(0, P - exp_from_prod)
       to_dom_from_imp  <- pmax(0, M - exp_from_imp)
       
-      to_dom_from_prod + to_dom_from_imp
+      list(
+        exp_from_prod    = exp_from_prod,
+        exp_from_imp     = exp_from_imp,
+        to_dom_from_prod = to_dom_from_prod,
+        to_dom_from_imp  = to_dom_from_imp,
+        DS_calc          = to_dom_from_prod + to_dom_from_imp
+      )
     }
     
-    # --- Elements by unit -----------------------------------------------
-    ELEMENTS_BY_UNIT <- list(
-      mass = c(
-        "Production","Import Quantity","Export Quantity",
-        "Domestic supply quantity","Feed","Food","Processing","Losses","Seed",
-        "Other uses (non-food)",
-        "Unused"                         # <-- AJOUT (tonnes)
-      ),
-      energy = c(
-        "Energy Domestic supply quantity",
-        "Energy Export Quantity",
-        "Energy Food",
-        "Energy Feed",
-        "Energy Import Quantity",
-        "Energy Losses",
-        "Energy Other uses (non-food)",
-        "Energy Processing",
-        "Energy Production",
-        "Energy Unused"
-      )
-    )
-    
+    # --- Elements mapping (Processing removed from USES) -------------------
     FACTMAP <- list(
       mass = list(
         P  = "Production",
         M  = "Import Quantity",
         E  = "Export Quantity",
         DS = "Domestic supply quantity",
-        uses = c("Feed","Food","Processing","Losses","Seed","Other uses (non-food)","Unused")
+        PROC = "Processing",
+        uses = c("Feed","Food","Losses","Seed","Other uses (non-food)","Unused") # no Processing
       ),
       energy = list(
         P  = "Energy Production",
         M  = "Energy Import Quantity",
         E  = "Energy Export Quantity",
         DS = "Energy Domestic supply quantity",
-        uses = c("Energy Food","Energy Feed","Energy Losses","Energy Processing",
-                 "Energy Other uses (non-food)","Energy Unused")
+        PROC = "Energy Processing",
+        uses = c("Energy Food","Energy Feed","Energy Losses",
+                 "Energy Other uses (non-food)","Energy Unused") # no Energy Processing
       )
     )
     
     NODEMAP <- list(
       mass = list(
-        uses_nodes = c("Feed","Food","Processing","Losses","Seed","Other uses (non-food)","Unused"),
-        uses_fact  = c("Feed","Food","Processing","Losses","Seed","Other uses (non-food)","Unused")
+        uses_nodes = c("Feed","Food","Losses","Seed","Other uses (non-food)","Unused"),
+        uses_fact  = c("Feed","Food","Losses","Seed","Other uses (non-food)","Unused")
       ),
       energy = list(
-        uses_nodes = c("Food","Feed","Losses","Processing","Other uses (non-food)","Unused"),
-        uses_fact  = c("Energy Food","Energy Feed","Energy Losses","Energy Processing",
+        uses_nodes = c("Food","Feed","Losses","Other uses (non-food)","Unused"),
+        uses_fact  = c("Energy Food","Energy Feed","Energy Losses",
                        "Energy Other uses (non-food)","Energy Unused")
       )
     )
@@ -263,19 +221,16 @@ mod_crop_sankey_tonnes_server <- function(
       if (identical(unit_mode(), "energy")) {
         as.numeric(value_multiplier %||% 1) * as.numeric(value_multiplier_energy %||% 1)
       } else {
-        # mass stored in 1000 tonnes in fact
         as.numeric(value_multiplier %||% 1) * 1000
       }
     })
     
-    # --- Scénarios (codes) : ordre central puis filtrage --------------------
+    # --- Scénarios : ordre config -----------------------------------------
     scen_codes_ordered <- reactive({
       sc <- unique(as.character(r_scenarios()))
       sc <- sc[!is.na(sc) & nzchar(sc)]
-      
       known   <- intersect(SCENARIO_LEVELS_DEFAULT, sc)
       unknown <- setdiff(sc, SCENARIO_LEVELS_DEFAULT)
-      
       c(known, sort(unknown))
     })
     
@@ -285,12 +240,10 @@ mod_crop_sankey_tonnes_server <- function(
     })
     
     baseline_code <- reactive({
-      # Prefer explicit config if available
       if (exists("SCENARIO_BASE_YEAR_CODE", inherits = TRUE)) {
         b <- as.character(get("SCENARIO_BASE_YEAR_CODE", inherits = TRUE))
         if (nzchar(b)) return(b)
       }
-      # Fallback: first scenario in default order intersecting the provided list
       b <- intersect(SCENARIO_LEVELS_DEFAULT, unique(as.character(r_scenarios())))
       b <- b[!is.na(b) & nzchar(b)]
       b[1] %||% NA_character_
@@ -313,7 +266,7 @@ mod_crop_sankey_tonnes_server <- function(
       paste0("Domestic supply of ", label_selected(), " (", unit_label(), ")")
     })
     output$title_flow <- renderText({
-      paste0("Flow of ", label_selected(), " (", unit_label(), ")")
+      paste0("Total flow of ", label_selected(), " (", unit_label(), ")")
     })
     
     # -----------------------------------------------------------------------
@@ -322,7 +275,7 @@ mod_crop_sankey_tonnes_server <- function(
     r_selected <- reactiveVal(NULL)
     
     # -----------------------------------------------------------------------
-    # bindCache keys (scalaires)
+    # bindCache keys
     # -----------------------------------------------------------------------
     cache_key_years <- reactive({
       req(r_country(), input$prod_sel, unit_mode())
@@ -367,7 +320,7 @@ mod_crop_sankey_tonnes_server <- function(
     })
     
     # -----------------------------------------------------------------------
-    # Scénarios réellement disponibles (selon unité)
+    # Scénarios réellement disponibles (selon unité) : basé sur DS (tous items)
     # -----------------------------------------------------------------------
     years_by_scenario <- reactive({
       sc_req <- scen_codes_ordered()
@@ -404,25 +357,18 @@ mod_crop_sankey_tonnes_server <- function(
     observeEvent(list(scen_available(), unit_mode()), {
       avail <- order_scen_by_config(scen_available())
       if (length(avail) == 0) return()
-      
       cur <- r_selected()
-      if (is.null(cur) || !cur %in% avail) {
-        r_selected(avail[1])
-      }
+      if (is.null(cur) || !cur %in% avail) r_selected(avail[1])
     }, ignoreInit = FALSE)
     
-    # Click unique pour les tuiles
     observeEvent(input$tile_click, {
       req(!is.null(input$tile_click$code))
       code <- as.character(input$tile_click$code)
-      if (nzchar(code) && code %in% scen_available()) {
-        r_selected(code)
-      }
+      if (nzchar(code) && code %in% scen_available()) r_selected(code)
     }, ignoreInit = TRUE)
     
     # -----------------------------------------------------------------------
-    # KPI (domestic supply + delta vs baseline)
-    # IMPORTANT: tiles now use DS_display = same as Sankey node (from P/M/E)
+    # KPI tiles: Domestic supply NET of processing, consistent with Sankey
     # -----------------------------------------------------------------------
     tiles_values <- reactive({
       rg   <- r_country()
@@ -435,17 +381,20 @@ mod_crop_sankey_tonnes_server <- function(
       yrs_join <- years_by_scenario() %>%
         dplyr::transmute(Scenario = Scenario_code, year_used)
       
-      elP <- FACTMAP[[um]]$P
-      elM <- FACTMAP[[um]]$M
-      elE <- FACTMAP[[um]]$E
-      el_need <- c(elP, elM, elE)
+      elP    <- FACTMAP[[um]]$P
+      elM    <- FACTMAP[[um]]$M
+      elE    <- FACTMAP[[um]]$E
+      elPROC <- FACTMAP[[um]]$PROC
       
-      df0 <- fact %>%
+      items_all <- items_selected()
+      
+      # M/E/PROC (all items)
+      df_rest <- fact %>%
         dplyr::filter(
           Region   == rg,
           Scenario %in% scs,
-          Item     %in% items_selected(),
-          stringr::str_trim(Element) %in% el_need,
+          Item     %in% items_all,
+          stringr::str_trim(Element) %in% c(elM, elE, elPROC),
           Year     %in% yrs_join$year_used,
           (is.na(System) | System == "" | System == "NA" | trimws(System) == ""),
           (is.na(Animal) | Animal == "" | Animal == "NA" | trimws(Animal) == "")
@@ -457,25 +406,55 @@ mod_crop_sankey_tonnes_server <- function(
         dplyr::summarise(val = sum(Value, na.rm = TRUE), .groups = "drop") %>%
         tidyr::pivot_wider(names_from = Element, values_from = val, values_fill = 0)
       
+      # P (all items, both mass and energy)
+      df_p <- fact %>%
+        dplyr::filter(
+          Region   == rg,
+          Scenario %in% scs,
+          Item     %in% items_all,
+          stringr::str_trim(Element) == elP,
+          Year     %in% yrs_join$year_used,
+          (is.na(System) | System == "" | System == "NA" | trimws(System) == ""),
+          (is.na(Animal) | Animal == "" | Animal == "NA" | trimws(Animal) == "")
+        ) %>%
+        dplyr::inner_join(yrs_join, by = "Scenario") %>%
+        dplyr::filter(Year == year_used) %>%
+        dplyr::group_by(Scenario) %>%
+        dplyr::summarise(P = sum(Value, na.rm = TRUE), .groups = "drop")
+      
       df <- tibble::tibble(Scenario = scs) %>%
-        dplyr::left_join(df0, by = "Scenario")
+        dplyr::left_join(df_rest, by = "Scenario") %>%
+        dplyr::left_join(df_p, by = "Scenario")
       
-      for (nm in el_need) if (!nm %in% names(df)) df[[nm]] <- 0
-      df <- df %>% dplyr::mutate(dplyr::across(all_of(el_need), ~ tidyr::replace_na(.x, 0)))
+      if (!elM %in% names(df)) df[[elM]] <- 0
+      if (!elE %in% names(df)) df[[elE]] <- 0
+      if (!elPROC %in% names(df)) df[[elPROC]] <- 0
+      if (!"P" %in% names(df)) df[["P"]] <- 0
       
-      P <- mult * as.numeric(df[[elP]])
-      M <- mult * as.numeric(df[[elM]])
-      E <- mult * as.numeric(df[[elE]])
+      df <- df %>%
+        dplyr::mutate(
+          M_raw    = tidyr::replace_na(.data[[elM]], 0),
+          E_raw    = tidyr::replace_na(.data[[elE]], 0),
+          PROC_raw = tidyr::replace_na(.data[[elPROC]], 0),
+          P_raw    = tidyr::replace_na(P, 0)
+        )
       
-      DS_display <- calc_ds_display(P, M, E)
+      P <- mult * as.numeric(df$P_raw)
+      M <- mult * as.numeric(df$M_raw)
+      E <- mult * as.numeric(df$E_raw)
+      PROC <- mult * as.numeric(df$PROC_raw)
       
-      setNames(as.list(DS_display), df$Scenario)
+      ds_parts <- calc_ds_from_pme(P, M, E)
+      DS_calc <- ds_parts$DS_calc
+      
+      DS_net <- pmax(0, DS_calc - pmax(0, PROC))
+      
+      setNames(as.list(DS_net), df$Scenario)
     }) %>% bindCache(cache_key_tiles())
     
     baseline_value <- reactive({
       b <- baseline_code()
       vals <- tiles_values()
-      
       if (is.na(b) || !nzchar(b)) return(NA_real_)
       v <- as.numeric(vals[[b]] %||% NA_real_)
       if (!is.finite(v)) return(NA_real_)
@@ -485,7 +464,6 @@ mod_crop_sankey_tonnes_server <- function(
     tiles_deltas <- reactive({
       base <- baseline_value()
       vals <- tiles_values()
-      
       setNames(
         lapply(vals, function(v){
           v <- as.numeric(v %||% NA_real_)
@@ -495,9 +473,6 @@ mod_crop_sankey_tonnes_server <- function(
       )
     }) %>% bindCache(cache_key_tiles())
     
-    # -----------------------------------------------------------------------
-    # Tuiles KPI
-    # -----------------------------------------------------------------------
     output$tiles <- renderUI({
       ns <- session$ns
       vals <- tiles_values()
@@ -517,10 +492,7 @@ mod_crop_sankey_tonnes_server <- function(
           class = "u-box",
           tags$button(
             type  = "button",
-            class = paste(
-              "u-card u-card--clickable u-card--focus",
-              if (is_active) "is-active"
-            ),
+            class = paste("u-card u-card--clickable u-card--focus", if (is_active) "is-active"),
             onclick = sprintf(
               "Shiny.setInputValue('%s', {code:'%s', nonce:Date.now()}, {priority:'event'});",
               ns("tile_click"), sc_code
@@ -528,8 +500,7 @@ mod_crop_sankey_tonnes_server <- function(
             div(class = "u-title", sc_lab),
             div(
               class = "u-value",
-              format(round(as.numeric(vals[[sc_code]] %||% 0)),
-                     big.mark = " ", scientific = FALSE),
+              format(round(as.numeric(vals[[sc_code]] %||% 0)), big.mark = " ", scientific = FALSE),
               tags$span(class = "u-unit", u_lab)
             ),
             {
@@ -556,7 +527,7 @@ mod_crop_sankey_tonnes_server <- function(
     })
     
     # -----------------------------------------------------------------------
-    # Données Sankey (selon unité)
+    # Données Sankey
     # -----------------------------------------------------------------------
     make_sankey_data <- reactive({
       sc  <- r_selected(); req(nzchar(sc))
@@ -569,72 +540,84 @@ mod_crop_sankey_tonnes_server <- function(
       
       mult <- unit_multiplier()
       
-      elements_needed <- ELEMENTS_BY_UNIT[[um]] %||% character(0)
-      validate(need(length(elements_needed) > 0, "No elements configured for this unit."))
+      items_all <- items_selected()
       
-      dat0 <- fact %>%
-        filter(
-          Region   == reg,
-          Scenario == sc,
-          Item     %in% items_selected(),
-          stringr::str_trim(Element) %in% elements_needed,
-          Year     == year_used,
-          (is.na(System) | System == "" | System == "NA" | trimws(System) == ""),
-          (is.na(Animal) | Animal == "" | Animal == "NA" | trimws(Animal) == "")
-        )
+      elP    <- FACTMAP[[um]]$P
+      elM    <- FACTMAP[[um]]$M
+      elE    <- FACTMAP[[um]]$E
+      elDS   <- FACTMAP[[um]]$DS
+      elPROC <- FACTMAP[[um]]$PROC
       
-      tot <- dat0 %>%
-        mutate(Element = stringr::str_trim(Element)) %>%
-        group_by(Element) %>%
-        summarise(val = sum(Value, na.rm = TRUE), .groups = "drop") %>%
-        tidyr::pivot_wider(names_from = Element, values_from = val, values_fill = 0)
-      
-      g  <- function(nm) as.numeric(tot[[nm]] %||% 0)
-      
-      P_raw  <- g(FACTMAP[[um]]$P)
-      M_raw  <- g(FACTMAP[[um]]$M)
-      E_raw  <- g(FACTMAP[[um]]$E)
-      DS_raw <- g(FACTMAP[[um]]$DS)
-      
-      P  <- mult * P_raw
-      M  <- mult * M_raw
-      E  <- mult * E_raw
-      DS <- mult * DS_raw
-      
-      # Uses
       uses_fact  <- NODEMAP[[um]]$uses_fact
       uses_nodes <- NODEMAP[[um]]$uses_nodes
       
-      use_vals <- stats::setNames(rep(0, length(uses_nodes)), uses_nodes)
-      for (i in seq_along(uses_nodes)) {
-        use_vals[[uses_nodes[i]]] <- mult * g(uses_fact[i])
+      # Pull all needed elements on ALL items
+      elements_all <- unique(c(elP, elM, elE, elDS, elPROC, uses_fact))
+      
+      dat_all <- fact %>%
+        dplyr::filter(
+          Region   == reg,
+          Scenario == sc,
+          Item     %in% items_all,
+          stringr::str_trim(Element) %in% elements_all,
+          Year     == year_used,
+          (is.na(System) | System == "" | System == "NA" | trimws(System) == ""),
+          (is.na(Animal) | Animal == "" | Animal == "NA" | trimws(Animal) == "")
+        ) %>%
+        dplyr::mutate(Element = stringr::str_trim(Element))
+      
+      tot_all <- dat_all %>%
+        dplyr::group_by(Element) %>%
+        dplyr::summarise(val = sum(Value, na.rm = TRUE), .groups = "drop")
+      
+      g_all <- function(el){
+        v <- tot_all$val[match(el, tot_all$Element)]
+        ifelse(is.na(v), 0, as.numeric(v))
       }
       
-      exp_from_prod    <- max(0, min(P, E))
-      exp_from_imp     <- max(0, E - exp_from_prod)
-      to_dom_from_prod <- max(0, P - exp_from_prod)
-      to_dom_from_imp  <- max(0, M - exp_from_imp)
+      # P_raw: ALL items for BOTH modes
+      P_raw <- g_all(elP)
+      M_raw <- g_all(elM)
+      E_raw <- g_all(elE)
+      PROC_raw <- g_all(elPROC)
       
-      DS_calc <- to_dom_from_prod + to_dom_from_imp
-      if (is.finite(DS_calc) && is.finite(DS) && abs(DS_calc - DS) > 1e-6) DS <- DS_calc
+      P <- mult * P_raw
+      M <- mult * M_raw
+      E <- mult * E_raw
+      PROC <- mult * PROC_raw
       
+      # P/M/E plumbing
+      ds_parts <- calc_ds_from_pme(P, M, E)
+      
+      exp_from_prod    <- ds_parts$exp_from_prod
+      exp_from_imp     <- ds_parts$exp_from_imp
+      to_dom_from_prod <- ds_parts$to_dom_from_prod
+      to_dom_from_imp  <- ds_parts$to_dom_from_imp
+      DS_calc          <- ds_parts$DS_calc
+      
+      # Remove Processing from the system (not counted, not shown)
+      DS_net <- max(0, DS_calc - max(0, PROC))
+      
+      # Scale contributions to Domestic supply so that inflows sum to DS_net
+      f <- if (is.finite(DS_calc) && DS_calc > 0) DS_net / DS_calc else 0
+      to_dom_from_prod_net <- f * to_dom_from_prod
+      to_dom_from_imp_net  <- f * to_dom_from_imp
+      
+      # Uses (NO processing element, all items)
+      use_vals <- stats::setNames(rep(0, length(uses_nodes)), uses_nodes)
+      for (i in seq_along(uses_nodes)) {
+        use_vals[[uses_nodes[i]]] <- mult * g_all(uses_fact[i])
+      }
+      
+      # Recompute Unused to close DS_net without counting Processing
       if (identical(um, "mass")) {
-        
-        uses_no_unused <- sum(use_vals[c("Feed","Food","Processing","Losses","Seed","Other uses (non-food)")], na.rm = TRUE)
-        residual <- DS - uses_no_unused
-        
-        # Tolérance micro-écarts (1 tonne)
+        uses_no_unused <- sum(use_vals[c("Feed","Food","Losses","Seed","Other uses (non-food)")], na.rm = TRUE)
+        residual <- DS_net - uses_no_unused
         tol <- 1
-        if (is.finite(residual) && residual > tol) {
-          use_vals[["Unused"]] <- residual
-        } else {
-          use_vals[["Unused"]] <- 0
-        }
-        
+        use_vals[["Unused"]] <- if (is.finite(residual) && residual > tol) residual else 0
       } else {
-        
-        uses_no_unused <- sum(use_vals[c("Food","Feed","Losses","Processing","Other uses (non-food)")], na.rm = TRUE)
-        residual <- DS - uses_no_unused
+        uses_no_unused <- sum(use_vals[c("Food","Feed","Losses","Other uses (non-food)")], na.rm = TRUE)
+        residual <- DS_net - uses_no_unused
         use_vals[["Unused"]] <- max(0, residual)
       }
       
@@ -643,79 +626,73 @@ mod_crop_sankey_tonnes_server <- function(
       edges <- tibble::tibble(
         from  = c("Production","Imports","Production","Imports", rep("Domestic supply", length(uses_nodes))),
         to    = c("Exports","Exports","Domestic supply","Domestic supply", uses_nodes),
-        value = c(exp_from_prod, exp_from_imp, to_dom_from_prod, to_dom_from_imp, unname(use_vals[uses_nodes]))
+        value = c(exp_from_prod, exp_from_imp, to_dom_from_prod_net, to_dom_from_imp_net, unname(use_vals[uses_nodes]))
       )
       
-      if (!has_exports) {
-        edges <- edges %>% filter(to != "Exports")
-      }
-      
-      edges <- edges %>% filter(is.finite(value), value > 0)
+      if (!has_exports) edges <- edges %>% dplyr::filter(to != "Exports")
+      edges <- edges %>% dplyr::filter(is.finite(value), value > 0)
       validate(need(nrow(edges) > 0, "No flow available for this product group and scenario."))
       
       nodes_present <- unique(c(edges$from, edges$to))
-      if (is.finite(DS) && DS > 0 && !("Domestic supply" %in% nodes_present)) {
+      if (is.finite(DS_net) && DS_net > 0 && !("Domestic supply" %in% nodes_present)) {
         nodes_present <- c(nodes_present, "Domestic supply")
       }
-      if (!("Food" %in% nodes_present)) {
-        nodes_present <- c(nodes_present, "Food")
-      }
+      if (!("Food" %in% nodes_present)) nodes_present <- c(nodes_present, "Food")
       
       node_order <- if (identical(um, "energy")) {
         c("Production","Imports","Exports","Domestic supply",
-          "Food","Feed","Losses","Processing","Other uses (non-food)","Unused")
+          "Food","Feed","Losses","Other uses (non-food)","Unused")
       } else {
         c("Production","Imports","Exports","Domestic supply",
-          "Feed","Food","Processing","Losses","Seed","Other uses (non-food)","Unused")
+          "Feed","Food","Losses","Seed","Other uses (non-food)","Unused")
       }
       
       nodes_core <- node_order[node_order %in% nodes_present]
       
-      # Ancre invisible pour Food à droite
+      # invisible anchor
       nds <- c(nodes_core, "Food__anchor")
       id  <- stats::setNames(seq_along(nds) - 1L, nds)
       
       src <- unname(id[edges$from])
       trg <- unname(id[edges$to])
-      val_u <- edges$value
+      val_u <- as.numeric(edges$value)
       
-      # % links: exports relative to total exports; other links relative to domestic supply
-      if (has_exports) {
-        trg_is_exports <- edges$to == "Exports"
-      } else {
-        trg_is_exports <- rep(FALSE, nrow(edges))
-      }
-      denom_link_real <- ifelse(trg_is_exports, E, DS)
-      pct_link <- ifelse(denom_link_real > 0, val_u / denom_link_real, NA_real_)
+      # shares: exports vs E; others vs DS_net
+      trg_is_exports <- if (has_exports) (edges$to == "Exports") else rep(FALSE, nrow(edges))
+      denom_link_real <- ifelse(trg_is_exports, E, DS_net)
+      pct_link <- ifelse(denom_link_real > 0, edges$value / denom_link_real, NA_real_)
       
-      # Lien d’ancre (Food -> Food__anchor), invisible
+      # anchor link
       eps <- 1e-6
       src   <- c(src, id["Food"])
       trg   <- c(trg, id["Food__anchor"])
       val_u <- c(val_u, eps)
       pct_link <- c(pct_link, NA_real_)
       
-      # Positions fixes
       x_map <- c("Production"=0.05, "Imports"=0.05,
                  "Exports"=0.50, "Domestic supply"=0.50,
                  "Feed"=0.93, "Food"=0.93, "Losses"=0.93,
                  "Seed"=0.93, "Other uses (non-food)"=0.93,
-                 "Processing"=0.93, "Unused"=0.93,
+                 "Unused"=0.93,
                  "Food__anchor"=0.98)
       
       y_map <- if (identical(um, "energy")) {
         c("Production"=0.20, "Imports"=0.70,
           "Exports"=0.88, "Domestic supply"=0.40,
-          "Food"=0.22, "Feed"=0.10, "Losses"=0.45, "Processing"=0.62,
+          "Food"=0.22, "Feed"=0.10, "Losses"=0.45,
           "Other uses (non-food)"=0.78, "Unused"=0.92,
           "Food__anchor"=0.22)
       } else {
         c("Production"=0.20, "Imports"=0.70,
           "Exports"=0.88, "Domestic supply"=0.40,
-          "Feed"=0.12, "Food"=0.48, "Processing"=0.62, "Losses"=0.72,
+          "Feed"=0.12, "Food"=0.48, "Losses"=0.72,
           "Seed"=0.82, "Other uses (non-food)"=0.90, "Unused"=0.96,
           "Food__anchor"=0.48)
       }
+      
+      # For node labels in absolute mode, display IN-SCOPE totals (net of processing)
+      P_scope <- exp_from_prod + to_dom_from_prod_net
+      M_scope <- exp_from_imp  + to_dom_from_imp_net
       
       list(
         unit_mode      = um,
@@ -727,14 +704,18 @@ mod_crop_sankey_tonnes_server <- function(
         nodes          = nds,
         src            = src,
         trg            = trg,
-        val_u          = as.numeric(val_u),
+        val_u          = val_u,
         pct_link       = pct_link,
         node_x         = unname(x_map[nds]),
         node_y         = unname(y_map[nds]),
         totals         = list(
-          P=P, M=M, E=E, DS=DS,
+          P_scope = P_scope,
+          M_scope = M_scope,
+          E = E,
+          DS_net = DS_net,
           uses = use_vals,
-          in_DS_prod = to_dom_from_prod, in_DS_imp = to_dom_from_imp
+          in_DS_prod = to_dom_from_prod_net,
+          in_DS_imp  = to_dom_from_imp_net
         )
       )
     }) %>% bindCache(cache_key_sankey_data())
@@ -750,8 +731,6 @@ mod_crop_sankey_tonnes_server <- function(
       val_u <- sd$val_u
       as_pct <- isTRUE(input$as_pct)
       
-      stopifnot(is.numeric(val_u), length(val_u) == length(src))
-      
       th <- if (exists("get_plotly_tokens", mode = "function", inherits = TRUE)) {
         get_plotly_tokens()
       } else {
@@ -759,8 +738,7 @@ mod_crop_sankey_tonnes_server <- function(
           font_color    = "#111827",
           node_border   = "rgba(255,255,255,0.25)",
           hover_bg      = "rgba(17,24,39,0.95)",
-          hover_font    = "#FFFFFF",
-          baseline_color= "rgba(255,255,255,0.55)"
+          hover_font    = "#FFFFFF"
         )
       }
       
@@ -771,9 +749,7 @@ mod_crop_sankey_tonnes_server <- function(
       } else rep("#CCCCCC", length(nds))
       
       anchor_node_idx <- which(nds == "Food__anchor")
-      if (length(anchor_node_idx) == 1L) {
-        node_cols[anchor_node_idx] <- "rgba(0,0,0,0)"
-      }
+      if (length(anchor_node_idx) == 1L) node_cols[anchor_node_idx] <- "rgba(0,0,0,0)"
       
       link_cols <- try({
         if (exists("sankey_link_colors_from_src", inherits = TRUE)) {
@@ -790,20 +766,24 @@ mod_crop_sankey_tonnes_server <- function(
           vapply(base, to_rgba, character(1))
         }
       }, silent = TRUE)
-      if (inherits(link_cols, "try-error") || length(link_cols) != length(src))
+      if (inherits(link_cols, "try-error") || length(link_cols) != length(src)) {
         link_cols <- rep("rgba(204,204,204,0.5)", length(src))
+      }
       
       fmt_u <- function(x) format(round(x), big.mark = " ", scientific = FALSE)
       
-      P  <- sd$totals$P; M <- sd$totals$M; E <- sd$totals$E; DS <- sd$totals$DS
-      uses <- sd$totals$uses
+      P_scope <- sd$totals$P_scope
+      M_scope <- sd$totals$M_scope
+      E       <- sd$totals$E
+      DS_net  <- sd$totals$DS_net
+      uses    <- sd$totals$uses
       in_DS_prod <- sd$totals$in_DS_prod
       in_DS_imp  <- sd$totals$in_DS_imp
       u_sym <- sd$unit_symbol
       
-      sum_DS_E <- DS + E
-      share_DS <- if (sum_DS_E > 0) DS/sum_DS_E else NA_real_
-      share_E  <- if (sum_DS_E > 0) E/sum_DS_E  else NA_real_
+      sum_DS_E <- DS_net + E
+      share_DS <- if (sum_DS_E > 0) DS_net/sum_DS_E else NA_real_
+      share_E  <- if (sum_DS_E > 0) E/sum_DS_E      else NA_real_
       
       pct_or_dash <- function(x, denom){
         if (is.finite(denom) && denom > 0) scales::percent(x/denom, accuracy = 0.1) else "—"
@@ -815,33 +795,31 @@ mod_crop_sankey_tonnes_server <- function(
         if (as_pct) {
           val_pct <- switch(
             name,
-            "Production"        = pct_or_dash(in_DS_prod, DS),
-            "Imports"           = pct_or_dash(in_DS_imp,  DS),
+            "Production"        = pct_or_dash(in_DS_prod, DS_net),
+            "Imports"           = pct_or_dash(in_DS_imp,  DS_net),
             "Exports"           = if (is.finite(share_E))  scales::percent(share_E,  accuracy = 0.1) else "—",
             "Domestic supply"   = if (is.finite(share_DS)) scales::percent(share_DS, accuracy = 0.1) else "—",
-            "Feed"              = pct_or_dash(uses[["Feed"]],   DS),
-            "Food"              = pct_or_dash(uses[["Food"]],   DS),
-            "Losses"            = pct_or_dash(uses[["Losses"]], DS),
-            "Seed"              = pct_or_dash(uses[["Seed"]],   DS),
-            "Other uses (non-food)" = pct_or_dash(uses[["Other uses (non-food)"]], DS),
-            "Processing"        = pct_or_dash(uses[["Processing"]], DS),
-            "Unused"            = pct_or_dash(uses[["Unused"]], DS),
+            "Feed"              = pct_or_dash(uses[["Feed"]],   DS_net),
+            "Food"              = pct_or_dash(uses[["Food"]],   DS_net),
+            "Losses"            = pct_or_dash(uses[["Losses"]], DS_net),
+            "Seed"              = pct_or_dash(uses[["Seed"]],   DS_net),
+            "Other uses (non-food)" = pct_or_dash(uses[["Other uses (non-food)"]], DS_net),
+            "Unused"            = pct_or_dash(uses[["Unused"]], DS_net),
             "—"
           )
           paste0(name, "<br><span>", val_pct, "</span>")
         } else {
           val_num <- switch(
             name,
-            "Production"        = P,
-            "Imports"           = M,
+            "Production"        = P_scope,
+            "Imports"           = M_scope,
             "Exports"           = E,
-            "Domestic supply"   = DS,
+            "Domestic supply"   = DS_net,
             "Feed"              = uses[["Feed"]],
             "Food"              = uses[["Food"]],
             "Losses"            = uses[["Losses"]],
             "Seed"              = uses[["Seed"]],
             "Other uses (non-food)" = uses[["Other uses (non-food)"]],
-            "Processing"        = uses[["Processing"]],
             "Unused"            = uses[["Unused"]],
             NA_real_
           )
@@ -869,7 +847,7 @@ mod_crop_sankey_tonnes_server <- function(
         )
       }
       
-      # lien d'ancre invisible
+      # anchor invisible link
       anchor_idx <- length(val_u)
       link_cols[anchor_idx]  <- "rgba(0,0,0,0)"
       link_label[anchor_idx] <- "<extra></extra>"
@@ -896,7 +874,7 @@ mod_crop_sankey_tonnes_server <- function(
         )
       ) %>%
         plotly::layout(
-          margin = list(l = 10, r = 30, t = 10, b = 45),
+          margin = list(l = 10, r = 30, t = 0, b = 45),
           font   = list(size = 12, color = th$font_color),
           paper_bgcolor = APP_TRANSPARENT,
           plot_bgcolor  = APP_TRANSPARENT,
@@ -941,8 +919,6 @@ mod_crop_sankey_tonnes_server <- function(
           Source         = nds[src + 1],
           Target         = nds[trg + 1],
           Value          = sd$val_u,
-          Value_tonnes   = if (identical(sd$unit_mode, "mass")) sd$val_u else NA_real_,
-          Value_Gcal     = if (identical(sd$unit_mode, "energy")) sd$val_u else NA_real_,
           Share_ref      = sd$pct_link
         )
         readr::write_delim(out, file, delim = ";")
@@ -950,37 +926,51 @@ mod_crop_sankey_tonnes_server <- function(
     )
     
     # -----------------------------------------------------------------------
-    # Note explicative
+    # Note
     # -----------------------------------------------------------------------
     output$note <- renderUI({
       sd <- try(make_sankey_data(), silent = TRUE)
-      if (inherits(sd, "try-error") || is.null(sd$nodes) || length(sd$nodes) == 0) {
-        return(NULL)
-      }
+      if (inherits(sd, "try-error") || is.null(sd$nodes) || length(sd$nodes) == 0) return(NULL)
       
       unit_txt <- if (identical(sd$unit_mode, "energy")) "energy (Gcal)" else "mass (tonnes)"
       
       txt <- glue::glue(
         "<p>
-        This figure shows, for the selected country and product group, how <strong>crop products</strong>
-        flow through the agri-food system in <strong>{unit_txt}</strong>.<br>
-        The tiles above the diagram indicate, for each scenario, the total <strong>domestic supply</strong>
-        of the selected products in <strong>{sd$unit_label}</strong>, together with the percentage change compared with the baseline.
-        </p>
-        <p>
-        The Sankey diagram below details the selected scenario ({sd$scenario_label}, {sd$year_used}):
-        flows from <em>Production</em> and <em>Imports</em> to <em>Domestic supply</em> and <em>Exports</em>, and then to final uses
-        (e.g. <em>Food</em>, <em>Feed</em>, <em>Processing</em>, <em>Losses</em>, <em>Seed</em>, <em>Other uses (non-food)</em>, <em>Unused</em>).
-        </p>
-        <p>
-        When <strong>\"Show as percentage (%)\"</strong> is ticked, node and link labels are expressed as shares of reference poles
-        (exports relative to total exports; other links relative to domestic supply). Tooltips always include underlying volumes in <strong>{sd$unit_label}</strong>.
-        </p>
-        <p>
-        <em>Unused</em> is displayed as the balancing item when needed: it captures the residual between <em>Domestic supply</em> and the sum of other internal uses.
-        </p>"
-      )
-      
+    This figure shows, for the selected country and product group, how <strong>crop products</strong>
+    flow through the agri-food system in <strong>{unit_txt}</strong>.
+    The tiles indicate the total <strong>domestic supply net of processing</strong> for each scenario in <strong>{sd$unit_label}</strong>.
+    </p>
+    The radio buttons above the chart switch between two representations :
+    </p>
+    <ul>
+      <li><strong>Energy</strong>:
+          flows are expressed in Gcal.
+      <li><strong>Mass</strong>:
+          flows are expressed in tonnes,
+          by summing, for each element, all crop and livestock items
+          (be careful: tonnes aggregate heterogeneous products, so the 
+          largest flows reflect volumes and composition effects;
+          use <em>Energy (Gcal)</em> for nutritional interpretation).</li>
+    </ul>
+    <p>
+      When the option <strong>\"Show as percentage (%)\"</strong> is ticked,
+      node and link information is expressed as shares of three reference poles:
+    </p>
+    <ul>
+      <li><strong>Sources</strong> (left side):
+          the percentages at <em>Production</em> and <em>Imports</em>
+          indicate the share of total sources, i.e. <em>Production + Imports</em>
+          (equivalently <em>Domestic supply + Exports</em>).</li>
+      <li><strong>Market balance</strong> (middle):
+          the percentages at <em>Domestic supply</em> and <em>Exports</em>
+          describe how total marketable quantities (<em>Domestic supply + Exports</em>)
+          are split between internal and external uses.</li>
+      <li><strong>Uses</strong> (right side):
+          the percentages at <em>Food</em>, <em>Feed</em>, <em>Losses</em>,
+          <em>Seed</em> and <em>Other uses (non-food)</em> show each use
+          as a share of <em>Domestic supply</em>.</li>
+    </ul>
+    </p>")
       htmltools::HTML(txt)
     })
     

@@ -1,4 +1,4 @@
-# R/3.6_mod_livestock_energy_share.R
+# R/5.4_mod_livestock_energy_share.R
 # -------------------------------------------------
 
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
@@ -361,11 +361,8 @@ mod_livestock_energy_share_server <- function(
       txt <- glue::glue(
         "<p>
         This chart shows the <strong>share of energy allocated to livestock feed</strong> within the country’s
-        <strong>domestic demand</strong> of agricultural products (Gcal), by scenario.<strong>Domestic demand</strong> 
-        is defined as the sum of <em>Food</em>, <em>Feed</em> and <em>Other uses</em>
-        (Domestic demand = Food + Feed + Other uses).<br>
-        The orange bar is the <em>domestic demand</em>, and the green bar is the <em>energy used as feed</em>.
-        Values are shown in <strong>millions of Gcal</strong>.<br>
+        <strong>domestic demand</strong> of agricultural products (Gcal), by scenario. <strong>Be careful</strong> : domestic demand 
+        is defined as the sum of <em>Food</em>, <em>Feed</em> and <em>Other uses</em> (Domestic demand = Food + Feed + Other uses).<br>
         The horizontal dotted line and the percentage label indicate the <strong>feed share</strong>
         (Energy Feed / Domestic demand).
         </p>"

@@ -1,10 +1,5 @@
 # R/2.3_mod_harvested_trend.R
 # ---------------------------------------------------------------
-# Module : évolution 2018 → 2050 des surfaces récoltées
-# - Vue "By product group" / "By scenario"
-# - Utilise harvested_core() pour les calculs
-# - Scénarios centralisés (config + helper global via r_scenarios)
-# ---------------------------------------------------------------
 
 mod_harvested_trend_ui <- function(id, height = "800px", full_width = TRUE){
   ns <- NS(id)
@@ -13,7 +8,7 @@ mod_harvested_trend_ui <- function(id, height = "800px", full_width = TRUE){
     div(
       class = "card-body",
       
-      h2("Focus on changes in harvested areas between 2018 and 2050"),
+      h2("Focus on changes in harvested areas between base year and 2050"),
       
       div(
         class = "u-controls u-controls--inline",
@@ -51,7 +46,7 @@ mod_harvested_trend_server <- function(
     id,
     fact,
     r_country,
-    r_scenarios = NULL,   # <- NOUVEAU : scénarios effectifs (reactive) depuis app.R
+    r_scenarios = NULL,   # <- scénarios effectifs (reactive) depuis app.R
     harvest_element = "Area harvested",
     exclude_items = c(
       "All products","All crops","Agricultural land occupation (Farm)",
@@ -62,13 +57,27 @@ mod_harvested_trend_server <- function(
 ){
   moduleServer(id, function(input, output, session){
     
-    # -------- Helpers config-first -----------------------------------------
-    sc_norm <- if (exists("scenario_code", mode = "function", inherits = TRUE)) scenario_code else {
-      function(x) stringr::str_squish(as.character(x))
-    }
-    sc_label <- if (exists("scenario_label", mode = "function", inherits = TRUE)) scenario_label else {
-      function(x) sc_norm(x)
-    }
+    # -------- Config (single source of truth) ------------------------------
+    shiny::validate(
+      shiny::need(exists("scenario_code", mode = "function", inherits = TRUE),
+                  "Missing config: scenario_code()"),
+      shiny::need(exists("scenario_label", mode = "function", inherits = TRUE),
+                  "Missing config: scenario_label()"),
+      shiny::need(exists("SCENARIO_LEVELS_DEFAULT", inherits = TRUE),
+                  "Missing config: SCENARIO_LEVELS_DEFAULT"),
+      shiny::need(exists("SCENARIOS_BASE_CODES", inherits = TRUE),
+                  "Missing config: SCENARIOS_BASE_CODES")
+    )
+    
+    sc_norm  <- get("scenario_code",  inherits = TRUE)
+    sc_label <- get("scenario_label", inherits = TRUE)
+    
+    # Base scenarios (codes) in global config order
+    SCEN_SHOW <- intersect(get("SCENARIO_LEVELS_DEFAULT", inherits = TRUE),
+                           get("SCENARIOS_BASE_CODES", inherits = TRUE))
+    if (length(SCEN_SHOW) == 0) SCEN_SHOW <- get("SCENARIOS_BASE_CODES", inherits = TRUE)
+    
+    SCEN_SHOW_KEY <- paste(SCEN_SHOW, collapse = "|")
     
     # -----------------------------------------------------------
     # Noyau commun
@@ -80,12 +89,12 @@ mod_harvested_trend_server <- function(
       exclude_items     = exclude_items,
       value_multiplier  = value_multiplier,
       group_var         = group_var,
-      r_scenarios       = r_scenarios     # <- IMPORTANT : branchement helper global
+      r_scenarios       = r_scenarios
     )
     
-    scen_base            <- core$scen_base
-    scen_diets_effective <- core$scen_diets_effective
-    data_harvested_groups <- core$data_harvested_groups
+    scen_base              <- core$scen_base
+    scen_diets_effective   <- core$scen_diets_effective
+    data_harvested_groups  <- core$data_harvested_groups
     
     # -----------------------------------------------------------
     # Graphique "2018 → 2050"
@@ -102,17 +111,26 @@ mod_harvested_trend_server <- function(
       base_year   <- suppressWarnings(min(df$Year, na.rm = TRUE))
       target_year <- suppressWarnings(max(df$Year, na.rm = TRUE))
       
-      # Sécurise les niveaux de scénarios (codes) depuis le facteur renvoyé par le core
+      # niveaux scénarios (codes) depuis le core (ou, à défaut, depuis les données)
       scen_levels <- if (is.factor(df$Scenario)) levels(df$Scenario) else sort(unique(as.character(df$Scenario)))
+      scen_levels <- sc_norm(scen_levels)
       scen_levels <- scen_levels[!is.na(scen_levels) & nzchar(scen_levels)]
       
+      # ---- enrichissement + labels config + facteur UI pour la légende Plotly
       df <- df %>%
         dplyr::mutate(
-          Scenario_code  = as.character(Scenario),
+          Scenario_code  = sc_norm(Scenario),
           Scenario_label = sc_label(Scenario_code),
-          # on garde Scenario factor pour l’ordre + couleurs, mais on a label à côté
+          
+          # ordre interne (codes)
           Scenario = factor(Scenario_code, levels = scen_levels),
-          Scenario_label = factor(Scenario_label, levels = sc_label(scen_levels)),
+          
+          # >>> FACTEUR UI (labels config) : utilisé pour la couleur => légende Plotly correcte
+          Scenario_ui = factor(
+            Scenario_label,
+            levels = sc_label(scen_levels)
+          ),
+          
           area_1000 = area / 1000,
           pct_label = dplyr::if_else(
             is.na(pct_change),
@@ -121,7 +139,7 @@ mod_harvested_trend_server <- function(
           ),
           tooltip = paste0(
             "Group: ", as.character(group), "<br>",
-            "Scenario: ", as.character(Scenario_label), "<br>",
+            "Scenario: ", as.character(Scenario_ui), "<br>",
             "Year: ", Year, "<br>",
             "Area: ", scales::comma(round(area_1000, 1)), " 1000 ha<br>",
             "Change vs base year: ", pct_label
@@ -135,15 +153,15 @@ mod_harvested_trend_server <- function(
         # MODE "BY PRODUCT GROUP"
         # -------------------------
         
-        # Offsets génériques des labels (%), dépendants du rang du scénario
+        # Offsets génériques des labels (%), dépendants du rang du scénario (codes)
         df_labels_plot <- df_labels %>%
           dplyr::group_by(group) %>%
           dplyr::mutate(
             yrange = suppressWarnings(max(area_1000, na.rm = TRUE) - min(area_1000, na.rm = TRUE)),
             yrange = dplyr::if_else(!is.finite(yrange) | yrange == 0, 1, yrange),
-            n_sc   = dplyr::n_distinct(Scenario),
-            scen_rank = as.integer(Scenario),                 # basé sur l’ordre factor (core)
-            offset_idx = scen_rank - (n_sc + 1) / 2,          # centré
+            n_sc      = length(scen_levels),
+            scen_rank = match(Scenario_code, scen_levels),
+            offset_idx = scen_rank - (n_sc + 1) / 2,
             y_offset = offset_idx * 0.06 * yrange,
             area_label = area_1000 + y_offset
           ) %>%
@@ -154,8 +172,8 @@ mod_harvested_trend_server <- function(
           ggplot2::aes(
             x      = Year,
             y      = area_1000,
-            colour = Scenario,   # <- codes (couleurs stables)
-            group  = interaction(Scenario, group),
+            colour = Scenario_ui,                 # <<< IMPORTANT : labels config
+            group  = interaction(Scenario_code, group),
             text   = tooltip
           )
         ) +
@@ -171,8 +189,8 @@ mod_harvested_trend_server <- function(
               x      = Year,
               y      = area_label,
               label  = pct_label,
-              colour = Scenario,
-              group  = interaction(Scenario, group)
+              colour = Scenario_ui,
+              group  = interaction(Scenario_code, group)
             ),
             hjust   = 0,
             nudge_x = 3.5,
@@ -206,20 +224,16 @@ mod_harvested_trend_server <- function(
             plot.background  = ggplot2::element_rect(fill = "transparent", colour = NA)
           )
         
-        # Couleurs scénarios : valeurs sur codes, labels UI via scenario_label()
+        # Couleurs scénarios : stables par CODE mais appliquées aux LABELS UI
         if (exists("SCENARIO_COLORS", inherits = TRUE)) {
-          scen_use <- as.character(scen_diets_effective())
-          scen_use <- intersect(scen_use, names(SCENARIO_COLORS))
-          if (length(scen_use) > 0) {
-            g <- g + ggplot2::scale_colour_manual(
-              values = SCENARIO_COLORS,
-              breaks = scen_use,
-              labels = sc_label(scen_use)
-            )
+          SCENARIO_COLORS_LOCAL <- get("SCENARIO_COLORS", inherits = TRUE)
+          
+          scen_use_code <- intersect(scen_levels, names(SCENARIO_COLORS_LOCAL))
+          if (length(scen_use_code) > 0) {
+            scen_use_lab <- sc_label(scen_use_code)
+            vals <- stats::setNames(unname(SCENARIO_COLORS_LOCAL[scen_use_code]), scen_use_lab)
+            g <- g + ggplot2::scale_colour_manual(values = vals, breaks = names(vals))
           }
-        } else {
-          # Au minimum, renommer les breaks (si ggplot choisit un ordre)
-          g <- g + ggplot2::scale_colour_discrete(labels = sc_label)
         }
         
       } else {
@@ -245,7 +259,6 @@ mod_harvested_trend_server <- function(
           dplyr::select(-max_2050, -keep_group)
         
         req(nrow(df_scen) > 0)
-        
         df_labels_scen <- df_scen %>% dplyr::filter(Year == target_year)
         
         g <- ggplot2::ggplot(
@@ -290,8 +303,8 @@ mod_harvested_trend_server <- function(
             y = "Area harvested (1000 ha)",
             colour = "Product group"
           ) +
-          # Facettes sur LABELS UI (pas sur codes)
-          ggplot2::facet_wrap(~ Scenario_label, nrow = 1) +
+          # Facettes sur labels UI (config)
+          ggplot2::facet_wrap(~ Scenario_ui, nrow = 1) +
           ggplot2::theme_minimal(base_size = 11) +
           ggplot2::theme(
             strip.background = ggplot2::element_rect(fill = "grey90", colour = NA),
@@ -384,17 +397,18 @@ mod_harvested_trend_server <- function(
         mode <- input$facet_mode
         if (is.null(mode) || !mode %in% c("product", "scenario")) mode <- "product"
         
-        base_year   <- suppressWarnings(min(df$Year, na.rm = TRUE))
         target_year <- suppressWarnings(max(df$Year, na.rm = TRUE))
         
         scen_levels <- if (is.factor(df$Scenario)) levels(df$Scenario) else sort(unique(as.character(df$Scenario)))
+        scen_levels <- sc_norm(scen_levels)
         scen_levels <- scen_levels[!is.na(scen_levels) & nzchar(scen_levels)]
         
         df <- df %>%
           dplyr::mutate(
-            Scenario_code  = as.character(Scenario),
+            Scenario_code  = sc_norm(Scenario),
             Scenario_label = sc_label(Scenario_code),
             Scenario       = factor(Scenario_code, levels = scen_levels),
+            Scenario_ui    = factor(Scenario_label, levels = sc_label(scen_levels)),
             area_1000      = area / 1000
           )
         
@@ -423,6 +437,7 @@ mod_harvested_trend_server <- function(
             Pays                    = r_country(),
             Scenario_code           = Scenario_code,
             Scenario                = Scenario_label,
+            Scenario_UI             = as.character(Scenario_ui),
             Groupe_produit          = as.character(group),
             Annee                   = Year,
             Surface_ha              = area,
@@ -457,9 +472,7 @@ mod_harvested_trend_server <- function(
         </ul>
         Harvested areas on the y-axis are expressed in <strong>thousand hectares (1000 ha)</strong>.
         Labels near the <strong>{target_year}</strong> points indicate the percentage change
-        in harvested area compared with the base year for each group–scenario combination.<br>
-        In the “By scenario” view, crop groups with less than <strong>50,000 ha</strong> of harvested area in
-        {target_year} may be hidden to improve readability.
+        in harvested area compared with the base year for each group–scenario combination.
         </p>"
       ))
     })

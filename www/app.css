@@ -1,34 +1,43 @@
-/* Ce module gère le style de l'application (police, coulers, encadrés...). 
-Les onglets "home page" et "about" ont leurs propres designs dans leurs modules
-respectifs */
+/* ============================================================
+   app.css — AFD Valorisation
+   - Design global de l'app (encadrés, navbar, header, KPI…)
+   - Home & About utilisent le style commun via la classe .home2
+   ============================================================ */
 
 
-/* ===== Design tokens ===== */
+/* =========================
+   0) Design tokens (global)
+   ========================= */
 :root{
   --app-font: 'Segoe UI', 'Roboto', Helvetica, Arial, sans-serif;
+
+  /* Texte global par défaut (app + cards) */
   --title-color:#FFFFFF;
   --subtitle-color:#111A2E;
+
   --title-xxl:2rem; --title-xl:1.75rem; --title-lg:1.5rem;
   --title-md:1.25rem; --title-sm:1.125rem; --title-xs:1rem;
   --title-weight:600; --title-margin:0 0 8px 0;
 
-   /* Fond de la page */
+  /* Fond de la page */
   --page-bg:#ffffff;
 
-  /* Couleurs pour les bandeaux */
+  /* Navbar */
   --nav-bg:#ffffff;
   --nav-text:#334155;
   --nav-text-hover:#111A2E;
   --nav-active:#111A2E;
   --nav-sep:#e5e7eb;
   --nav-underline:#111A2E;
+
+  /* Accent / marque */
   --brand-blue:#c23934;
   --brand-blue-ring:#c23934;
 
-  /* Cards (design system) */
-  --card-bg:#111A2E;   /* couleur intérieure des cadrs des graphiques */
-  --card-bd:#404757;   /* couleur de bordure des cards */
-  --card-inner:#ffffff;   /* couleur intérieure des encadrés informatifs */
+  /* Cards (design system global) */
+  --card-bg:#111A2E;        /* intérieur encadrés des graphiques */
+  --card-bd:#404757;        /* bordure cards */
+  --card-inner:#ffffff;     /* intérieur encadrés informatifs */
   --card-radius:12px;
   --card-pad:16px;
   --card-shadow:0 4px 14px rgba(16,24,40,0.04);
@@ -36,27 +45,49 @@ respectifs */
   --value-color:#1f2937;
 
   /* Header spacing */
-  --header-gap:24px;}
+  --header-gap:24px;
+}
 
-/* desktop override for header gap */
 @media (min-width: 992px){
   :root{ --header-gap:32px; }
 }
 
-html {min-height: 100%;}
 
-body {min-height: 100vh;display: flex;flex-direction: column; margin: 0;background: var(--page-bg);}
+/* =========================
+   1) Base layout
+   ========================= */
+html{ min-height:100%; }
 
-.app-page {flex: 1 0 auto;display: block;}
-.app-footer {flex-shrink: 0;width: 100%;}
+body{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  margin:0;
+  background:var(--page-bg);
+}
 
-/* Normalisation des titres et polices ===== */
-.app h1,
-.app h2,
-.app h3,
-.app h4,
-.app h5,
-.app h6 {color: var(--title-color);}
+.app-page{ flex:1 0 auto; display:block; }
+.app-footer{ flex-shrink:0; width:100%; }
+
+/* Espace pour ne pas masquer le haut des pages sous la navbar fixe */
+.app-page{ padding-top:50px; }
+
+
+/* =========================
+   2) Normalisation polices / titres
+   ========================= */
+.app, .app *{
+  box-sizing:border-box;
+  font-family:var(--app-font);
+}
+
+/* Couleur par défaut dans l'app (tes modules “résultats”) */
+.app{ color: var(--title-color); }
+
+/* Titres */
+.app h1, .app h2, .app h3, .app h4, .app h5, .app h6{
+  color: var(--title-color);
+}
 h1,.h1{font-size:var(--title-xxl);font-weight:var(--title-weight);margin:var(--title-margin)}
 h2,.h2{font-size:var(--title-xl); font-weight:var(--title-weight);margin:var(--title-margin)}
 h3,.h3{font-size:var(--title-lg); font-weight:var(--title-weight);margin:var(--title-margin)}
@@ -64,103 +95,139 @@ h4,.h4{font-size:var(--title-md); font-weight:var(--title-weight);margin:var(--t
 h5,.h5{font-size:var(--title-sm); font-weight:var(--title-weight);margin:var(--title-margin)}
 h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--title-margin)}
 
+/* Titres “section” (fond clair hors cards) */
+.app h1.section-title{ color: var(--subtitle-color) !important; }
 
-/* ================== NORMALISATION GLOBALE ================== */
-.app, .app * {box-sizing: border-box;font-family: var(--app-font);}
-
-.app h1.section-title{color: var(--subtitle-color) !important;}
+/* Petits messages (ex: note scénario non affiché) */
 .app .text-muted,
-.app .text-muted em{color: #FFFFFF !important; opacity: 0.9;}  /* les petits messages en cas de non-affichage d'un scénario */
+.app .text-muted em{
+  color:#FFFFFF !important;
+  opacity:0.9;
+}
 
-/* Couleur de texte par défaut sur le conteneur seulement (héritage normal) */
-.app {color: var(--title-color);}
 
-/* --- HELPER pour ne pas écraser la police des icônes de tééléchargement --- */
+/* =========================
+   3) Fix police icônes (FontAwesome / Glyphicons)
+   ========================= */
 .app i.fa, .app i.fas, .app i.far, .app i.fab,
 .app span.fa, .app span.fas, .app span.far, .app span.fab,
 .app i[class^="fa-"], .app i[class*=" fa-"],
-.app span[class^="fa-"], .app span[class*=" fa-"]{ font-family: "Font Awesome 6 Free","Font Awesome 5 Free",
-               "Font Awesome 6 Brands","Font Awesome 5 Brands" !important; font-weight: 900; }
+.app span[class^="fa-"], .app span[class*=" fa-"]{
+  font-family:"Font Awesome 6 Free","Font Awesome 5 Free",
+              "Font Awesome 6 Brands","Font Awesome 5 Brands" !important;
+  font-weight:900;
+}
 
-/* Glyphicons (Bootstrap 3) pour compatibilité downloadLink etc. */
-.app .glyphicon{font-family: "Glyphicons Halflings" !important; font-weight: normal !important;}
+.app .glyphicon{
+  font-family:"Glyphicons Halflings" !important;
+  font-weight:normal !important;
+}
 
 
-/* ================== UTILITAIRES (Design System) ================== */
-
-/* ENCADRES DES CARDS */
+/* =========================
+   4) Design system — cartes internes (u-card)
+   ========================= */
 .app .u-card{
   display:block;
   width:100%;
-  background:var(--card-inner);           /*  couleur de fond de la carte */
-  border:2px solid var(--card-bd);     /*  bordure grise claire */
-  border-radius:var(--card-radius);    /*  arrondi des coins */
-  padding:var(--card-pad);             /*  marge intérieure */
-  box-shadow:var(--card-shadow);}     /*  ombre portée légère */
+  background:var(--card-inner);
+  border:2px solid var(--card-bd);
+  border-radius:var(--card-radius);
+  padding:var(--card-pad);
+  box-shadow:var(--card-shadow);
+}
 
-/* VARIANTES DES ENCADRES DES GRAPHIQUES */
-.app .u-card--flat{ box-shadow:none; }  /* même carte mais sans ombre */
-.app .u-card--hover:hover{ box-shadow:var(--card-shadow-hover); }  /* ombre un peu plus marquée au survol */
-.app .u-card--clickable{cursor:pointer; transition: box-shadow .15s ease-in-out, border-color .15s ease-in-out;} /* annonce visuellement que c'est cliquable */
-.app .u-card--focus:focus{ outline:0; }
-.app .u-card--focus:focus-visible,
-.app .is-active{border-color: var(--brand-blue) !important;box-shadow: 0 0 0 2px var(--brand-blue-ring) !important;} /* bleu à la selection */
+.app .u-card--flat{ box-shadow:none; }
+.app .u-card--hover:hover{ box-shadow:var(--card-shadow-hover); }
 
-/* CONTENEUR DYNAMIQUE */
+.app .u-card--clickable{
+  cursor:pointer;
+  transition: box-shadow .15s ease-in-out,
+              border-color .15s ease-in-out,
+              background-color .15s ease-in-out;
+}
+
+/* Sélection carte cliquable */
+:root{
+  --clickable-selected-bg: rgba(194, 57, 52, 0.10);
+}
+.app .u-card--clickable.is-active{
+  opacity:1 !important;
+  background-color:var(--card-inner) !important;
+  background-image:linear-gradient(0deg,var(--clickable-selected-bg),var(--clickable-selected-bg)) !important;
+  border-color:var(--brand-blue) !important;
+  box-shadow:var(--card-shadow) !important;
+}
+.app .u-card--clickable.u-card--hover.is-active:hover{
+  box-shadow:var(--card-shadow-hover) !important;
+}
+
+
+/* =========================
+   5) Layout utilitaires (u-row)
+   ========================= */
 .app .u-row{
   display:flex;
   gap:16px;
-  flex-wrap:wrap;          /* Autorise le retour à la ligne si pas assez de place */
-  align-items:stretch;}     /* Toutes les cartes prennent la même hauteur */
-
+  flex-wrap:wrap;
+  align-items:stretch;
+}
 @media (max-width: 767px){
-  .app .u-row{flex-direction:column;}} /* en mode vertical sur mobile*/
-  .app .u-box{ width:100%; }
+  .app .u-row{ flex-direction:column; }
+}
+.app .u-box{ width:100%; }
 
 .app .u-row > *{
-  flex:1 1 0;              /* Chaque enfant prend une largeur flexible égale */
-  min-width:260px;}         /* En-dessous de 260px, au lieu de se tasser, il passe à la ligne */
-
-/* Centrage du contenu pour les cartes KPI (hors header bleu) */
-.app .energy-kpi .u-box,
-.app .surface-cards .u-box,
-.app .kpi-card { 
-  text-align: center;
+  flex:1 1 0;
+  min-width:220px;
 }
 
-/* STYLE DU TEXTE DANS LES ENCADRES */
-.app .u-title{font-size:14px;font-weight:600;color:var(--subtitle-color);margin:0 0 8px 0;} /* Sous-titre */
-.app .u-value{font-size:28px;font-weight:700;margin:0;color:var(--value-color);line-height:1.15;} /* la valeur centrale */
-.app .u-unit {font-size:12px;color:var(--subtitle-color);margin-left:6px;} /* l'unité */
-.app .u-sub{font-size:12px;color:var(--subtitle-color);margin-top:6px;} /* explication sous la valeur */
+/* Centrage cartes KPI (hors header bleu) */
+.app .energy-kpi .u-box,
+.app .surface-cards .u-box,
+.app .kpi-card{ text-align:center; }
 
-/* Deltas de tendance */
-.app .u-sub .up,
-.app .u-sub .up strong{color:#0b8f6f;font-weight:600;}
-.app .u-sub .down,
-.app .u-sub .down strong{color:#c23934;font-weight:600;}
+/* Texte dans u-card */
+.app .u-title{font-size:14px;font-weight:600;color:var(--subtitle-color);margin:0 0 8px 0;}
+.app .u-value{font-size:28px;font-weight:700;margin:0;color:var(--value-color);line-height:1.15;}
+.app .u-unit {font-size:12px;color:var(--subtitle-color);margin-left:6px;}
+.app .u-sub{font-size:12px;color:var(--subtitle-color);margin-top:6px;}
 
-/*la barre d’actions type "CSV" en bas à droite*/
-.app .u-actions{margin: 8px 0 2px;display: flex;justify-content: flex-end;gap: 10px;} 
+/* Deltas */
+.app .u-sub .up, .app .u-sub .up strong{color:#0b8f6f;font-weight:600;}
+.app .u-sub .down, .app .u-sub .down strong{color:#c23934;font-weight:600;}
+
+/* Actions (CSV etc.) */
+.app .u-actions{
+  margin:8px 0 2px;
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+}
 .app .u-actions .btn,
-.app .u-actions a{display: inline-flex;align-items: center;gap: 6px;font-weight: 600;text-decoration: none;}
-.app .u-actions a:hover{ text-decoration: underline; }
+.app .u-actions a{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-weight:600;
+  text-decoration:none;
+}
+.app .u-actions a:hover{ text-decoration:underline; }
 
-/* ===== Réduction spécifique pour les KPI de surfaces ===== */
-
-/* 1. Cartes un peu plus compactes dans surface-cards */
+/* KPI surfaces */
 .app .surface-cards .u-title{font-size:13px;}
 .app .surface-cards .u-value{font-size:24px;}
 .app .surface-cards .u-unit,
 .app .surface-cards .u-sub{font-size:11px;}
-
-/* 2. Réduire la largeur minimale des cartes pour pouvoir en afficher 5 côte à côte */
 .app .surface-cards .u-row > *{min-width:200px;}
+@media (min-width: 1200px){
+  .app .surface-cards .u-row{ flex-wrap:nowrap; }
+}
 
-/* Optionnel : sur écrans larges, on force à rester sur une seule ligne */
-@media (min-width: 1200px){.app .surface-cards .u-row{flex-wrap: nowrap;}}
 
-/* ================== ENCADRÉS UNIFIÉS (hors header et cards) ================== */
+/* =========================
+   6) Encadrés unifiés (well/panel/box/card)
+   ========================= */
 .app .well,
 .app .panel, .app .panel-default, .app .panel-body, .app .panel-heading,
 .app .box, .app .box-body, .app .box-header,
@@ -170,6 +237,7 @@ h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--t
   border-radius:var(--card-radius) !important;
   box-shadow:var(--card-shadow) !important;
 }
+
 .app .panel-heading, .app .box-header, .app .card-header{
   background:transparent !important;
   border-bottom:1px solid var(--card-bd) !important;
@@ -177,13 +245,15 @@ h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--t
   padding:8px 12px !important;
   margin:0 !important;
 }
+
 .app .panel-body, .app .box-body, .app .card-body{
   padding:14px 16px !important;
 }
-.app .panel{ border:none !important; }       /* supprime le double-bord BS3 */
+
+.app .panel{ border:none !important; }
 .app .panel-body{ border:none !important; }
 
-/* Uniformité dans les onglets (contre-styles de thèmes) */
+/* Uniformité dans tab-content */
 .app .tab-content .tab-pane .well,
 .app .tab-content .tab-pane .panel, .app .tab-content .tab-pane .panel-default,
 .app .tab-content .tab-pane .box,
@@ -195,17 +265,20 @@ h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--t
 }
 
 
-/* KPI “historiques” — mappés sur le design system (optionnel) */
+/* =========================
+   7) KPI “historiques” (header)
+   ========================= */
 .kpi-card{
   background:var(--card-bg);
   border:1px solid var(--card-bd);
   border-radius:var(--card-radius);
   padding:14px 16px;
-  margin: 8px 0;
-  box-shadow: var(--card-shadow);
+  margin:8px 0;
+  box-shadow:var(--card-shadow);
   text-align:center;
 }
 .kpi-card:hover{ box-shadow:var(--card-shadow-hover); }
+
 .kpi-head{
   display:flex;
   align-items:center;
@@ -239,81 +312,107 @@ h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--t
   color:var(--subtitle-color);
   text-align:center;
 }
-.kpi-sub .kpi-delta.up{
-  color:#0b8f6f;
-  font-weight:600;
-}
-.kpi-sub .kpi-delta.down{color:#c23934;font-weight:600;}
+.kpi-sub .kpi-delta.up{ color:#0b8f6f; font-weight:600; }
+.kpi-sub .kpi-delta.down{ color:#c23934; font-weight:600; }
 
 
-/* ================== REACTION AU CLIC ================== */
+/* =========================
+   8) Focus / interaction (inputs + btn)
+   ========================= */
 .form-control:focus,
-.input-group .form-control:focus{border-color:var(--brand-blue) !important;outline:none !important;box-shadow:0 0 0 2px var(--brand-blue-ring) !important;}
-.selectize-control.single .selectize-input.focus{border-color:var(--brand-blue) !important;box-shadow:0 0 0 4px var(--brand-blue-ring) !important;}
+.input-group .form-control:focus{
+  border-color:var(--brand-blue) !important;
+  outline:none !important;
+  box-shadow:0 0 0 2px var(--brand-blue-ring) !important;
+}
+.selectize-control.single .selectize-input.focus{
+  border-color:var(--brand-blue) !important;
+  box-shadow:0 0 0 4px var(--brand-blue-ring) !important;
+}
 .btn:focus,
 .btn:active:focus,
-.btn:focus-visible{outline:none !important;border-color:var(--brand-blue) !important;box-shadow:0 0 0 2px var(--brand-blue-ring) !important;}
-
-/* Focus encadrés */
+.btn:focus-visible{
+  outline:none !important;
+  border-color:var(--brand-blue) !important;
+  box-shadow:0 0 0 2px var(--brand-blue-ring) !important;
+}
 .app .well:focus-within,
 .app .panel:focus-within,
 .app .box:focus-within,
-.app .card:focus-within{outline:none !important;border-color:var(--brand-blue) !important;box-shadow:0 0 0 2px var(--brand-blue-ring) !important;}
+.app .card:focus-within{
+  outline:none !important;
+  border-color:var(--brand-blue) !important;
+  box-shadow:0 0 0 2px var(--brand-blue-ring) !important;
+}
 
 
-/* ================== ONGLETS ================== */
+/* =========================
+   9) Navbar (Bootstrap 3)
+   ========================= */
 .navbar-default{
   background:var(--nav-bg);
   border-color:var(--nav-sep);
   box-shadow:0 1px 0 #F6F7FB;
-   margin-bottom: 0 ;}
+  margin-bottom:0;
+}
 
 .navbar-default .navbar-brand{
   color:var(--nav-text);
   font-weight:600;
-  letter-spacing:.1px;}
-  
+  letter-spacing:.1px;
+}
+
 .navbar-default .navbar-nav>li>a{
   color:var(--nav-text);
   padding:12px 16px;
   border-left:1px solid var(--nav-sep);
-  position:relative;}
-  
+  position:relative;
+}
+
 .navbar-default .navbar-nav>li:first-child>a{ border-left:none; }
 
 .navbar-default .navbar-nav>li>a:hover{
   color:var(--nav-text-hover);
-  background-color:#F6F7FB;}
-  
+  background-color:#F6F7FB;
+}
+
 .navbar-default .navbar-nav>.active>a,
-
 .navbar-default .navbar-nav>.active>a:hover,
-
 .navbar-default .navbar-nav>.active>a:focus{
   color:var(--nav-active);
   background:var(--nav-bg);
   font-weight:600;
-  box-shadow: inset 0 -3px 0 var(--nav-underline); /* soulignement actif */}
-  
+  box-shadow: inset 0 -3px 0 var(--nav-underline);
+}
+
 .navbar-default .navbar-nav>li>a:focus-visible{
   outline:none;
   box-shadow:inset 0 -3px 0 var(--nav-active);
-  border-radius:0;}
+  border-radius:0;
+}
 
-/* ===== ADAPTATION POUR MOBILE ===== */
+/* Mobile */
 @media (max-width:991px){
   .navbar-default .navbar-nav>li>a{
     border-left:0;
-    border-top:1px solid var(--nav-sep);}
-    
-  .navbar-default .navbar-nav>li:first-child>a{ border-top:none; }}
+    border-top:1px solid var(--nav-sep);
+  }
+  .navbar-default .navbar-nav>li:first-child>a{ border-top:none; }
+}
+
+/* Police navbar héritée */
+.navbar-default,
+.navbar,
+.navbar a{ font-family:var(--app-font) !important; }
 
 
-/* ====== BANDEAU DU HAUT ====== */
+/* =========================
+   10) Bandeau du haut (header)
+   ========================= */
 .app-header{
-  background: var(--card-bg);
-  margin-bottom: var(--header-gap); /* marge de sous le bandeau */
-  border-bottom: 4px solid var(--nav-underline); /* la ligne qui sépare le bandeau du reste */
+  background:var(--card-bg);
+  margin-bottom:var(--header-gap);
+  border-bottom:4px solid var(--nav-underline);
 }
 .app-header .app-header-row{
   display:flex;
@@ -324,76 +423,390 @@ h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--t
   font-weight:600;
 }
 .app-header .app-header-sep{
-  margin: 8px 0 0;
+  margin:8px 0 0;
   border:0;
   border-top:1px solid rgba(255,255,255,.35);
 }
 
-
-/* ====== ENCADRE PRINCIPAL (INFOS PAYS) ====== */
+/* Encadré principal (infos pays) dans le header */
 .app-header .kpi-card,
 .app-header .well,
 .app-header .panel,
 .app-header .box,
 .app-header .card{
-  background:#ffffff ;
-  border:2px solid; color: #888c96 !important;
+  background:#ffffff;
+  border:2px solid;
+  color:#888c96 !important;
   box-shadow:0 8px 18px rgba(0,0,0,.06) !important;
   min-width:450px;
   text-align:left;
 }
-.app-header .kpi-title{color:var(--subtitle-color);}
-.app-header .kpi-value{color:var(--subtitle-color);}
+.app-header .kpi-title{ color:var(--subtitle-color); }
+.app-header .kpi-value{ color:var(--subtitle-color); }
 
 
-/* ================== Liens/nav (police héritée) ================== */
-.navbar-default,
-.navbar,
-.navbar a {font-family: var(--app-font) !important;}
-
-
-/* ================== Plotly / DataTables (police héritée) ================== */
+/* =========================
+   11) Plotly / DataTables
+   ========================= */
 .app .plotly,
 .app .modebar,
-.app .modebar * {
-  font-family: var(--app-font) !important;
+.app .modebar *{
+  font-family:var(--app-font) !important;
 }
 .app .dataTables_wrapper,
-.app table.dataTable {
-  font-family: var(--app-font) !important;
+.app table.dataTable{
+  font-family:var(--app-font) !important;
 }
 
 
-/* ================== BANDEAU DU BAS ================== */
-.app-footer{background: var(--page-bg);color: #fff;padding: 22px 16px;min-height: 92px;flex-shrink: 0;width: 100%; margin-top: 24px;}
-.app-footer .row{display: flex; justify-content: center;}
-.app-footer .col-xs-12{display: flex;flex-direction: column;align-items: center;gap: 10px;text-align: center;}
-.app-footer .brand{order: -1;}
-.app-footer .brand img{display: block;height: 56px;width: auto;}
+/* =========================
+   12) Footer
+   ========================= */
+.app-footer{
+  background:var(--page-bg);
+  color:#fff;
+  padding:22px 16px;
+  min-height:92px;
+  flex-shrink:0;
+  width:100%;
+  margin-top:24px;
+}
+.app-footer .row{ display:flex; justify-content:center; }
+.app-footer .col-xs-12{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:10px;
+  text-align:center;
+}
+.app-footer .brand{ order:-1; }
+.app-footer .brand img{ display:block; height:56px; width:auto; }
+.app-footer a{ color:#fff; text-decoration:none; }
+.app-footer a:hover{ text-decoration:underline; }
 
-/* keep links white in the footer */
-.app-footer a{color:#fff;text-decoration:none;}
-.app-footer a:hover{text-decoration:underline;}
 
-
-/* Format de la ligne de séparation entre les parties */
+/* =========================
+   13) HR “rule”
+   ========================= */
 .rule{
-  --rule-width: 100%;
-  --rule-height: 2px;
-  --rule-color: #111A2E;
-  --rule-radius: 999px;
-  --rule-margin: 24px 0;
+  --rule-width:100%;
+  --rule-height:2px;
+  --rule-color:#111A2E;
+  --rule-radius:999px;
+  --rule-margin:24px 0;
 
-  width: var(--rule-width); height: var(--rule-height); background: var(--rule-color); border: 0; margin: var(--rule-margin); border-radius: var(--rule-radius);}
+  width:var(--rule-width);
+  height:var(--rule-height);
+  background:var(--rule-color);
+  border:0;
+  margin:var(--rule-margin);
+  border-radius:var(--rule-radius);
+}
 
 
-/* Format des encadrés explicatifs avant les graphiques */
+/* =========================
+   14) Encadrés explicatifs (diets)
+   ========================= */
+.app .diet-cards{ margin-top:10px; }
+.app .diet-card{ padding:14px 16px; }
+.app .diet-card-title{
+  font-size:18px;
+  font-weight:600;
+  margin:0 0 6px 0;
+  color:var(--subtitle-color);
+  text-align:center;
+}
+.app .diet-card-text{
+  font-size:12px;
+  line-height:1.4;
+  color:var(--subtitle-color);
+}
 
-.app .diet-cards{ margin-top: 10px; }
-.app .diet-card{ padding: 14px 16px; }
-.app .diet-card-title{font-size: 18px; font-weight: 600; margin: 0 0 6px 0; color: var( --subtitle-color); text-align: center;}
-.app .diet-card-text{font-size: 12px; line-height: 1.4; color: var( --subtitle-color);}
 
-/* Espace pour ne pas masquer le haut des pages sous la navbar fixe */
-.app-page {padding-top: 50px;}
+/* ============================================================
+   15) HOME / ABOUT shared design — “Home2”
+   IMPORTANT: scoped only to elements having class .home2
+   => No impact on other tabs/cards
+   ============================================================ */
+
+/* Root */
+.home2{
+  --h2-primary:#111A2E;
+  --h2-danger:#ad1328;
+  --h2-muted: rgba(0,0,0,.65);
+  --h2-muted-inv: rgba(255,255,255,.82);
+  --h2-border: rgba(17,26,46,.16);
+  --h2-shadow-sm: 0 1px 2px rgba(17,26,46,.08);
+
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  color: var(--h2-primary);
+  font-size:16px;
+}
+
+/* HERO */
+.home2 .home2-hero{
+  background: var(--h2-primary);
+  padding: 30px 0 24px 0;
+}
+.home2 .home2-hero-inner{
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 14px;
+  text-align:center;
+}
+.home2 .home2-hero h1{
+  margin:0;
+  font-weight:900;
+  font-size:3.1rem;     /* gros */
+  line-height:1.05;
+  letter-spacing:.2px;
+  color:#fff;
+}
+.home2 .home2-hero p{
+  margin-top:12px;
+  color: var(--h2-muted-inv);
+  font-size:1.22rem;    /* gros */
+  line-height:1.55;
+}
+@media (max-width: 980px){
+  .home2 .home2-hero h1{ font-size:2.4rem; }
+  .home2 .home2-hero p{ font-size:1.10rem; }
+}
+
+/* WRAP */
+.home2 .home2-wrap{
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 18px 14px 16px 14px;
+}
+
+/* Switch (radioButtons en pills) */
+.home2 .home2-switch{
+  display:flex;
+  justify-content:center;
+  margin: 6px 0 18px 0;
+}
+.home2 .home2-switch .shiny-input-radiogroup{ margin:0; }
+.home2 .home2-switch .radio{ margin:0; }
+.home2 .home2-switch label{ margin:0 8px 0 0; }
+
+.home2 .home2-switch input[type="radio"]{
+  position:absolute;
+  opacity:0;
+  width:1px;
+  height:1px;
+}
+
+.home2 .home2-switch .radio-inline{
+  display:inline-flex;
+  align-items:center;
+  margin:0;
+  padding:10px 14px;
+  border:1px solid rgba(17,26,46,.18);
+  border-radius:999px;
+  font-weight:900;
+  cursor:pointer;
+  user-select:none;
+  background:#fff;
+  color:var(--h2-primary);
+}
+.home2 .home2-switch .radio-inline:hover{
+  background:rgba(17,26,46,.04);
+}
+
+/* Selected (avec :has) */
+.home2 .home2-switch label:has(input[type="radio"]:checked){
+  background: var(--h2-primary);
+  color:#fff;
+  border-color: rgba(0,0,0,.18);
+}
+.home2 .home2-switch label:has(input[type="radio"]:checked):hover{
+  background:#0c1222;
+}
+
+/* Sections / cards (par défaut = pas d’encadrés) */
+.home2 .home2-card{
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  padding:0;
+}
+.home2 .home2-card + .home2-card{ margin-top:18px; }
+
+.home2 .home2-card-title{
+  font-size:2.3rem;
+  margin:0 0 10px 0;
+  color: var(--h2-danger);
+  font-weight:900;
+}
+
+/* Variante carte claire (About + blocs texte lisibles) */
+.home2 .home2-card.home2-card-light{
+  background:#fff;
+  color: var(--h2-primary);
+}
+.home2 .home2-card.home2-card-light .home2-muted{
+  color: rgba(0,0,0,.68);
+}
+.home2 .home2-card.home2-card-light a{
+  color: inherit;
+}
+
+/* Helpers */
+.home2 .home2-muted{ color: var(--h2-muted); }
+
+.home2 .home2-divider{
+  height:1px;
+  background: rgba(17,26,46,.14);
+  margin:14px 0;
+}
+
+/* Badges */
+.home2 .home2-badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:10px 0 12px 0;
+}
+.home2 .home2-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:900;
+  font-size:.92rem;
+  border:1px solid rgba(0,0,0,.10);
+}
+.home2 .home2-badge-danger{
+  color: var(--h2-danger);
+  background: rgba(173,19,40,.08);
+  border-color: rgba(173,19,40,.22);
+}
+.home2 .home2-badge-secondary{
+  color: var(--h2-primary);
+  background: rgba(17,26,46,.06);
+  border-color: rgba(17,26,46,.16);
+}
+
+/* Accordions via <details> */
+.home2 details.home2-acc{
+  border:1px solid rgba(17,26,46,.14);
+  border-radius:12px;
+  padding:10px 12px;
+  margin:10px 0;
+  background:#111A2E;
+  box-shadow:none;
+
+  /* Texte blanc dedans */
+  color: rgba(255,255,255,.92);
+}
+.home2 details.home2-acc[open]{ border-color: rgba(17,26,46,.22); }
+
+.home2 summary.home2-acc-sum{
+  cursor:pointer;
+  font-weight:900;
+  list-style:none;
+  color:#fff;
+}
+.home2 summary.home2-acc-sum::-webkit-details-marker{ display:none; }
+.home2 summary.home2-acc-sum:after{
+  content:"▾";
+  float:right;
+  color: rgba(255,255,255,.85);
+}
+.home2 details.home2-acc[open] summary.home2-acc-sum:after{ content:"▴"; }
+
+.home2 details.home2-acc p{ margin-top:8px; color: rgba(255,255,255,.90); }
+.home2 details.home2-acc ul{
+  margin:8px 0 0 0;
+  padding-left:18px;
+  color: rgba(255,255,255,.90);
+}
+.home2 details.home2-acc li{ margin:6px 0; color: rgba(255,255,255,.90); }
+
+.home2 details.home2-acc a{
+  color:#fff;
+  text-decoration:underline;
+}
+
+/* Boutons Home2 */
+.home2 .home2-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:10px 14px;
+  border-radius:12px;
+  border:1px solid rgba(17,26,46,.16);
+  font-weight:900;
+  text-decoration:none;
+}
+.home2 .home2-btn-primary{
+  background: var(--h2-primary);
+  color:#fff;
+  border-color: rgba(0,0,0,.18);
+}
+.home2 .home2-btn-primary:hover{
+  background:#0c1222;
+  text-decoration:none;
+}
+
+/* “What is this application” (texte + image) */
+.home2 .home2-what-text{
+  font-size:1.85rem;
+  line-height:1.7;
+  max-width:1050px;
+  margin:0 auto;
+  text-align:center !important;
+}
+
+.home2 .home2-what-media{
+  max-width:1100px;
+  margin:34px auto 0 auto;
+}
+
+.home2 .home2-what-img{
+  width:100%;
+  height:min(420px, 52vh);
+  object-fit:cover;
+  object-position:center;
+  border-radius:16px;
+  border:1px solid rgba(17,26,46,.14);
+  display:block;
+}
+
+.home2 .home2-what-caption{ margin-top:12px; }
+
+@media (max-width: 980px){
+  .home2 .home2-what-text{
+    font-size:1.18rem;
+    line-height:1.65;
+  }
+  .home2 .home2-what-img{
+    height:min(260px, 38vh);
+  }
+}
+
+/* About: aligne les boutons sur une ligne + wrap propre */
+#about-about_root .about2-download-row{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+#about-about_root .home2-btn.home2-btn-primary,
+#about-about_root .home2-btn.home2-btn-primary:visited{
+  color:#fff !important;
+}
+
+/* ABOUT: image du schéma affichée entièrement (pas coupée) */
+#about-about_root .about2-diagram-img{
+  display:block;
+  width:100%;
+  height:auto;          /* clé: pas de hauteur imposée */
+  object-fit: contain;  /* au cas où */
+  border-radius: 0;     /* si tu veux “pas encadrée” */
+  border: 0;
+  box-shadow: none;
+}
 

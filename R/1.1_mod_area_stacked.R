@@ -499,11 +499,11 @@ mod_area_stacked_server <- function(
       htmltools::HTML(glue::glue(
         "<p>
         This chart shows, for the selected country, the decomposition of
-        <strong>\"available land\"</strong> (cropland, pastures/meadows and forest land) by scenario.
+        <strong>\"available land\"</strong> (cropland + pastures and meadows + forest land) by scenario.
         </p>
         <p>
         The <strong>dashed horizontal line</strong> corresponds to the
-        exploitable agricultural area in the base scenario. The hatched segments labelled
+        exploitable agricultural area (cropland + pastures and meadows) in the base scenario. The hatched segments labelled
         <em>\"Non-available land\"</em> represent the <strong>additional land</strong> that would
         be required to meet the scenario's land demand beyond this limit.
         </p>

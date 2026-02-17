@@ -53,7 +53,7 @@ SCENARIO_LEVELS_DEFAULT <- unique(c(
 ))
 
 # 5) Tolérances / seuil redondance (si tu veux centraliser)
-SCENARIO_REDUNDANCE_TOL_REL <- 0.05
+SCENARIO_REDUNDANCE_TOL_REL <- 0.02
 
 # ============================================================
 # SCENARIOS CONTRACT OBJECT (unique entrée pour les modules)
