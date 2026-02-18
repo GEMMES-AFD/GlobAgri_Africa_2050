@@ -69,100 +69,37 @@ mod_emissions_stacked_server <- function(
     }
     
     BASELINE_CODE <- scenario_code("Année de base")
-    
+  
     # -----------------------------------------------------------------------
-    # Local color system (families -> base colors -> shades)
+    # Local color system (ONE fixed color per displayed item)
     # -----------------------------------------------------------------------
-    
-    # Map a raw Group label -> a family key
-    source_family_key <- function(lbl){
-      x <- tolower(trimws(as.character(lbl)))
+    ITEM_COLORS <- c(
+      "Enteric"                                         = "#59A14F",
+      "Livestock other"                                 = "#9C755F",
+      "Production and application of fertilizer and pesticides" = "#F28E2B",
+      "Energy for crops"                                = "#4E79A7",
       
-      # ENERGY family (covers: "Energy", "On-Farm energy use", etc.)
-      if (grepl("\\bon[- ]farm\\s+energy\\s+use\\b", x)) return("Energy")
-      if (grepl("\\benergy\\b", x))                      return("Energy")
+      "Manure management"                               = "#76B7B2",
+      "Energy"                                          = "#1F77B4",
+      "On-Farm energy use"                              = "#AEC7E8",
       
-      # FERTILIZER APPLIED family (covers: synthetic/manure/residues fertilizer applied)
-      if (grepl("synthetic.*fertil", x)) return("Fertilizer_applied")
-      if (grepl("manure.*fertil", x))    return("Fertilizer_applied")
-      if (grepl("residues.*fertil", x))  return("Fertilizer_applied")
-      if (grepl("\\bfertilizer\\b.*appl", x)) return("Fertilizer_applied")
-      
-      # MANURE MANAGEMENT family
-      if (grepl("manure\\s+management", x)) return("Manure_management")
-      
-      # PASTURE family (excreta left on pasture)
-      if (grepl("left\\s+on\\s+pasture", x) || grepl("\\bpasture\\b", x)) return("Pasture")
-      
-      # CROP RESIDUES family (non fertilizer-applied wording)
-      if (grepl("\\bcrop\\s+resid", x)) return("Crop_residues")
-      if (grepl("\\bresidues\\b", x) && !grepl("fertil", x)) return("Crop_residues")
-      
-      # ENTERIC family (for total CO2e items like "Enteric" / "Enteric fermentation")
-      if (grepl("\\benteric\\b", x)) return("Enteric")
-      
-      # OTHER / catch-all
-      "Other"
-    }
-    
-    # Base colors per family (chosen to read well on dark background)
-    FAMILY_BASE_COL <- c(
-      "Enteric"            = "#59A14F", # green
-      "Energy"             = "#4E79A7", # blue
-      "Fertilizer_applied" = "#F28E2B", # orange
-      "Manure_management"  = "#76B7B2", # teal
-      "Pasture"            = "#8CD17D", # light green
-      "Crop_residues"      = "#E15759", # red
-      "Other"              = "#BAB0AC"  # grey
+      "Left on pasture"                                 = "#8CD17D",
+      "Residues Nitrogen Fertilizer applied"            = "#E15759",
+      "Synthetic Nitrogen Fertilizer applied"           = "#D62728",
+      "Manure Nitrogen Fertilizer applied"              = "#FF9896"
     )
     
-    # Create n shades around a base color (muted -> base -> slightly lighter)
-    # --- replace make_shades() (no scales::lighten) ------------------------------
-    
-    mix_with <- function(hex, mix = c("#FFFFFF", "#000000"), w = 0.2){
-      # w in [0,1]: 0 => unchanged; 1 => fully "mix"
-      w <- max(0, min(1, as.numeric(w)))
-      rgb1 <- grDevices::col2rgb(hex)
-      rgb2 <- grDevices::col2rgb(mix)
-      rgb  <- round((1 - w) * rgb1 + w * rgb2)
-      grDevices::rgb(rgb[1,], rgb[2,], rgb[3,], maxColorValue = 255)
-    }
-    
-    make_shades <- function(base_hex, n){
-      n <- max(1L, as.integer(n))
+    colors_for_groups <- function(group_levels){
+      lv <- as.character(group_levels)
+      pal <- ITEM_COLORS[lv]
       
-      # darker + muted, then base, then lighter (by mixing with black/white)
-      dark   <- mix_with(base_hex, "#000000", w = 0.35)
-      light  <- mix_with(base_hex, "#FFFFFF", w = 0.25)
-      
-      ramp <- grDevices::colorRampPalette(c(dark, base_hex, light))
-      ramp(n)
-    }
-    
-    
-    # Build a named vector: names = Group labels, values = hex colors
-    colors_for_groups <- function(group_labels){
-      labs <- as.character(group_labels)
-      fam  <- vapply(labs, source_family_key, character(1))
-      
-      out <- rep(NA_character_, length(labs))
-      names(out) <- labs
-      
-      for (k in unique(fam)){
-        idx <- which(fam == k)
-        fam_labels <- labs[idx]
-        fam_labels_ord <- sort(unique(fam_labels))
-        
-        base <- FAMILY_BASE_COL[[k]]
-        if (is.null(base) || is.na(base) || !nzchar(base)) base <- "#BAB0AC"
-        
-        shades <- make_shades(base, length(fam_labels_ord))
-        names(shades) <- fam_labels_ord
-        
-        out[idx] <- shades[fam_labels]
+      missing <- is.na(pal) | !nzchar(pal)
+      if (any(missing)) {
+        stop("Missing ITEM_COLORS for: ", paste(lv[missing], collapse = ", "))
+        # (si tu préfères un fallback au lieu d’un stop : pal[missing] <- "#BAB0AC")
       }
       
-      out
+      stats::setNames(unname(pal), lv)
     }
     
     # -----------------------------------------------------------------------

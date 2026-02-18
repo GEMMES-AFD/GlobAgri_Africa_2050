@@ -90,13 +90,13 @@ mod_animal_items_structure_server <- function(
       
       sc <- scen_codes_ordered()
       n_here <- fact %>%
-        filter(
+        dplyr::filter(
           Region == r_country(),
           Scenario %in% sc,
           stringr::str_trim(Element) == input$element
         ) %>%
-        summarise(n = n()) %>%
-        pull(n)
+        dplyr::summarise(n = dplyr::n()) %>%
+        dplyr::pull(n)
       
       validate(need(isTRUE(n_here > 0),
                     paste0("No data for ", input$element, " in this country.")))
@@ -147,55 +147,54 @@ mod_animal_items_structure_server <- function(
       validate(need(length(sc_req) > 0, "No scenario selected."))
       
       fact %>%
-        filter(
+        dplyr::filter(
           Region == r_country(),
           stringr::str_trim(Element) == element_fact(),
           Scenario %in% sc_req
         ) %>%
-        group_by(Scenario) %>%
-        summarise(
+        dplyr::group_by(Scenario) %>%
+        dplyr::summarise(
           year_used = suppressWarnings(max(Year[!is.na(Value)], na.rm = TRUE)),
           .groups   = "drop"
         ) %>%
-        filter(is.finite(year_used)) %>%
-        mutate(
+        dplyr::filter(is.finite(year_used)) %>%
+        dplyr::mutate(
           Scenario_code  = as.character(Scenario),
           Scenario       = factor(Scenario_code, levels = scen_levels_all())
         ) %>%
-        arrange(Scenario) %>%
-        select(Scenario_code, Scenario, year_used)
+        dplyr::arrange(Scenario) %>%
+        dplyr::select(Scenario_code, Scenario, year_used)
     }) %>% bindCache(cache_key_years())
     
-    # --- Colors for items (fixed palette + mapping) ----------------------------
-    
-    # Mapping: fact$Item (your labels) -> palette keys
-    ANIMAL_ITEM_TO_COLOR_KEY <- c(
-      "Bovine meat"         = "Beef cattle",
-      "Small ruminant meat" = "Meat sheep and goats",
-      "Eggs"                = "Poultry eggs",
-      "Poultry meat"        = "Poultry meat",
-      "Pork meat"           = "Pork meat",
-      "Dairy"               = "Dairy"
-      # "Aquatic animal products" not in palette -> will fallback (hue) automatically
+    # -----------------------------------------------------------------------
+    # SECURE COLOURS: one fixed colour per displayed Item (legend + slices)
+    # -----------------------------------------------------------------------
+    # Keys MUST match EXACTLY the Item labels used in `animal_items`.
+    # You can change colours here only.
+    ITEM_COLORS <- c(
+      "Bovine meat"             = "#E15759",
+      "Dairy"                   = "#4E79A7",
+      "Pork meat"               = "#9C755F",
+      "Poultry meat"            = "#F28E2B",
+      "Small ruminant meat"     = "#59A14F",
+      "Eggs"                    = "#EDC948",
+      "Aquatic animal products" = "#76B7B2"
     )
+    
+    ensure_palette <- function(item_levels, pal_named){
+      lv <- as.character(item_levels)
+      miss <- setdiff(lv, names(pal_named))
+      if (length(miss) > 0) {
+        stop("Missing ITEM_COLORS for: ", paste(miss, collapse = ", "))
+        # alternative non-bloquante :
+        # pal_named[miss] <- "#BAB0AC"
+      }
+      stats::setNames(unname(pal_named[lv]), lv)
+    }
     
     palette_items <- reactive({
       its <- as.character(animal_items)
-      
-      # Convert items -> palette keys (fallback to itself if no mapping)
-      keys <- unname(ANIMAL_ITEM_TO_COLOR_KEY[its])
-      keys[is.na(keys)] <- its[is.na(keys)]
-      
-      # Use your palette function if available, otherwise fallback
-      if (exists("emissions_animal_colors_for", mode = "function", inherits = TRUE)) {
-        cols_keys <- emissions_animal_colors_for(keys)
-      } else {
-        cols_keys <- setNames(scales::hue_pal()(length(keys)), keys)
-      }
-      
-      # Return colors named by ORIGINAL item labels (so marker lookup uses Item)
-      cols_items <- setNames(unname(cols_keys), its)
-      cols_items
+      ensure_palette(its, ITEM_COLORS)
     })
     
     # --- Aggregated data by ITEM (no groups) --------------------------------
@@ -211,22 +210,22 @@ mod_animal_items_structure_server <- function(
       uout <- unit_lbl()
       
       df_raw <- fact %>%
-        filter(
+        dplyr::filter(
           Region == r_country(),
           stringr::str_trim(Element) == element_fact(),
           Scenario %in% scen_present,
           Item %in% animal_items
         ) %>%
-        inner_join(select(yrs, Scenario_code, year_used), by = c("Scenario" = "Scenario_code")) %>%
-        filter(Year == year_used) %>%
-        group_by(Scenario, Item) %>%
-        summarise(
+        dplyr::inner_join(dplyr::select(yrs, Scenario_code, year_used), by = c("Scenario" = "Scenario_code")) %>%
+        dplyr::filter(Year == year_used) %>%
+        dplyr::group_by(Scenario, Item) %>%
+        dplyr::summarise(
           value   = sum(Value, na.rm = TRUE) * mult,
           unit    = uout,
           year    = dplyr::first(Year),
           .groups = "drop"
         ) %>%
-        mutate(
+        dplyr::mutate(
           Scenario = factor(as.character(Scenario), levels = scen_levels_all())
         )
       
@@ -236,20 +235,20 @@ mod_animal_items_structure_server <- function(
       )
       
       df <- grid %>%
-        left_join(df_raw, by = c("Scenario","Item")) %>%
-        left_join(select(yrs, Scenario, year_used), by = "Scenario") %>%
-        mutate(
-          value = coalesce(value, 0),
-          unit  = coalesce(unit, uout),
-          year  = coalesce(year, year_used),
+        dplyr::left_join(df_raw, by = c("Scenario","Item")) %>%
+        dplyr::left_join(dplyr::select(yrs, Scenario, year_used), by = "Scenario") %>%
+        dplyr::mutate(
+          value = dplyr::coalesce(value, 0),
+          unit  = dplyr::coalesce(unit, uout),
+          year  = dplyr::coalesce(year, year_used),
           Item  = factor(as.character(Item), levels = animal_items)
         ) %>%
-        group_by(Scenario) %>%
-        mutate(
+        dplyr::group_by(Scenario) %>%
+        dplyr::mutate(
           total = sum(value, na.rm = TRUE),
-          share = if_else(total > 0, value / total, NA_real_)
+          share = dplyr::if_else(total > 0, value / total, NA_real_)
         ) %>%
-        ungroup()
+        dplyr::ungroup()
       
       df
     }) %>% bindCache(cache_key_data())
@@ -303,23 +302,23 @@ mod_animal_items_structure_server <- function(
                     "No non-zero value to display."))
       
       th <- get_plotly_tokens()
-      cols <- palette_items()
+      cols <- palette_items()   # named by Item label
       u_lbl <- unit_lbl()
       
       df_share <- pd %>%
-        filter(total > 0) %>%
-        mutate(
-          label_pct = if_else(!is.na(share) & share >= 0.01, scales::percent(share, accuracy = 1), ""),
-          text_pos  = if_else(
+        dplyr::filter(total > 0) %>%
+        dplyr::mutate(
+          label_pct = dplyr::if_else(!is.na(share) & share >= 0.01, scales::percent(share, accuracy = 1), ""),
+          text_pos  = dplyr::if_else(
             !is.na(share) & share < 0.01, "none",
-            if_else(share < 0.05, "outside", "inside")
+            dplyr::if_else(share < 0.05, "outside", "inside")
           )
         )
       
       totals <- df_share %>%
-        distinct(Scenario) %>%
-        arrange(Scenario) %>%
-        mutate(
+        dplyr::distinct(Scenario) %>%
+        dplyr::arrange(Scenario) %>%
+        dplyr::mutate(
           Scenario_code  = as.character(Scenario),
           Scenario_label = clean_scenario_label(scenario_label_vec(Scenario_code))
         )
@@ -352,9 +351,9 @@ mod_animal_items_structure_server <- function(
         )
         
         d <- df_share %>%
-          filter(as.character(Scenario) == sc_code, value > 0) %>%
-          mutate(Item = factor(as.character(Item), levels = animal_items)) %>%
-          arrange(Item)
+          dplyr::filter(as.character(Scenario) == sc_code, value > 0) %>%
+          dplyr::mutate(Item = factor(as.character(Item), levels = animal_items)) %>%
+          dplyr::arrange(Item)
         
         if (nrow(d) == 0) next
         
@@ -373,7 +372,7 @@ mod_animal_items_structure_server <- function(
             textposition = ~text_pos,
             textfont     = list(color = th$font_color, size = 12),
             insidetextorientation = "horizontal",
-            marker       = list(colors = cols[as.character(d$Item)]),
+            marker       = list(colors = unname(cols[as.character(d$Item)])),
             customdata   = ~value,
             hovertemplate = paste0(
               "<b>", sc_lab, "</b><br>",
@@ -385,7 +384,6 @@ mod_animal_items_structure_server <- function(
             showlegend  = show_leg
           )
         
-        # under each pie: scenario name only
         annotations[[i]] <- list(
           x = slot_center,
           y = 0.12,
@@ -402,7 +400,20 @@ mod_animal_items_structure_server <- function(
         )
       }
       
+      # Apply global theme (can set colorway) then force colours again
       p <- plotly_apply_global_theme(p, bg = "transparent", grid = "none")
+      
+      # ---- FORCE colours AFTER theme (robust local/prod)
+      for (i in seq_along(p$x$data)) {
+        # For pie traces, colors are stored in marker$colors
+        labs <- p$x$data[[i]]$labels
+        if (!is.null(labs)) {
+          labs_chr <- as.character(labs)
+          if (all(labs_chr %in% names(cols))) {
+            p$x$data[[i]]$marker$colors <- unname(cols[labs_chr])
+          }
+        }
+      }
       
       p %>%
         plotly::layout(
@@ -442,7 +453,7 @@ mod_animal_items_structure_server <- function(
       content = function(file){
         pd <- data_items()
         out <- pd %>%
-          transmute(
+          dplyr::transmute(
             Country        = r_country(),
             Scenario_code  = as.character(Scenario),
             Scenario_label = clean_scenario_label(scenario_label_vec(as.character(Scenario))),
@@ -471,7 +482,7 @@ mod_animal_items_structure_server <- function(
         </p>
         <p>
         <strong>All pies have the same size</strong>: they represent <strong>percentage shares only</strong> among the selected items (composition),
-        not the absolute level of the flow. To complete the analysis, look at the quantitative level of the considered flow. 
+        not the absolute level of the flow. To complete the analysis, look at the quantitative level of the considered flow.
         </p>
         <p>
         Percentage labels are hidden for slices below <strong>1%</strong>.

@@ -118,6 +118,57 @@ mod_livestock_animal_products_prod_server <- function(
     }
     
     # -------------------------------------------------
+    # SECURE COLOURS (LOCAL ONLY, NO EXTERNAL DEP)
+    # -------------------------------------------------
+    # 1) Ruminants: fixed one-colour-per legend item (Component)
+    COMP_COLORS <- c(
+      "Bovine meat from beef cattle"            = "#E15759",
+      "Bovine meat from dairy cattle"           = "#F28E2B",
+      "Small ruminants meat from meat animals"  = "#59A14F",
+      "Small ruminants meat from dairy cattle"  = "#76B7B2",
+      "Dairy"                                   = "#4E79A7"
+    )
+    
+    # 2) Monogastrics: you can (optionally) hard-map colours by item.
+    # If empty, we fall back to a deterministic name->colour assignment (stable local/prod).
+    MONO_ITEM_COLORS <- c(
+      # Example (fill with your real items if you want full control):
+      # "Poultry meat" = "#A0CBE8",
+      # "Eggs"         = "#FFBE7D"
+    )
+    
+    ensure_palette <- function(levels_vec, pal_named, what = "items"){
+      lv <- as.character(levels_vec)
+      miss <- setdiff(lv, names(pal_named))
+      if (length(miss) > 0) {
+        stop("Missing colours for ", what, ": ", paste(miss, collapse = ", "))
+      }
+      stats::setNames(unname(pal_named[lv]), lv)
+    }
+    
+    # Deterministic fallback for monogastrics (stable local/prod, no deps)
+    # - uses a fixed pool of colours and assigns by name hash
+    stable_color_for_name <- function(nm, pool){
+      ints <- utf8ToInt(as.character(nm))
+      h <- sum(ints) %% length(pool) + 1L
+      pool[[h]]
+    }
+    
+    make_mono_palette <- function(item_levels){
+      lv <- as.character(item_levels)
+      
+      # If user provided explicit mapping, enforce it (strict)
+      if (length(MONO_ITEM_COLORS) > 0) {
+        return(ensure_palette(lv, MONO_ITEM_COLORS, what = "monogastric items"))
+      }
+      
+      # Otherwise: deterministic by name (stable even if order changes)
+      pool <- grDevices::hcl.colors(24, palette = "Dark 3")
+      cols <- vapply(lv, stable_color_for_name, character(1), pool = pool)
+      stats::setNames(unname(cols), lv)
+    }
+    
+    # -------------------------------------------------
     # Keys for bindCache
     # -------------------------------------------------
     scen_show_key <- shiny::reactive({
@@ -141,7 +192,7 @@ mod_livestock_animal_products_prod_server <- function(
       
       lvls_default <- norm_scenario(get("SCENARIO_LEVELS_DEFAULT", inherits = TRUE))
       
-      # Required columns (based on your screenshot)
+      # Required columns
       shiny::validate(
         shiny::need(all(c("Region","Scenario","Element","Item","Year","Animal","Unit","Value") %in% names(fact)),
                     "Missing required columns in fact (expected Region, Scenario, Element, Item, Year, Animal, Unit, Value).")
@@ -194,7 +245,6 @@ mod_livestock_animal_products_prod_server <- function(
     
     item_canon <- function(x){
       x <- stringr::str_squish(as.character(x))
-      # tolerant recodes
       x <- dplyr::recode(
         x,
         "Bovin meat"            = "Bovine meat",
@@ -226,7 +276,6 @@ mod_livestock_animal_products_prod_server <- function(
           dplyr::mutate(
             Item_main = factor(.data$Item_canon, levels = c("Bovine meat","Small ruminants meat","Dairy")),
             
-            # Sous-composantes empilées dans la barre de l'item
             Component = dplyr::case_when(
               .data$Item_canon == "Dairy" ~ "Dairy",
               
@@ -259,7 +308,6 @@ mod_livestock_animal_products_prod_server <- function(
         
       } else {
         
-        # Monogastrics = tout sauf les 3 ruminants
         df2 <- df2 %>% dplyr::filter(!(.data$Item_canon %in% RUM_ITEMS_CANON))
         
         ord <- df2 %>%
@@ -271,11 +319,10 @@ mod_livestock_animal_products_prod_server <- function(
         df2 <- df2 %>%
           dplyr::mutate(
             Item_main = factor(.data$Item_canon, levels = ord),
-            Component = factor(.data$Item_canon, levels = ord)  # 1 composante = pas d'empilement
+            Component = factor(.data$Item_canon, levels = ord)
           )
       }
       
-      # Agrégation Scenario/Year/Item_main/Component
       df_sum <- df2 %>%
         dplyr::group_by(.data$Scenario, .data$Year, .data$Item_main, .data$Component) %>%
         dplyr::summarise(
@@ -285,7 +332,6 @@ mod_livestock_animal_products_prod_server <- function(
         ) %>%
         dplyr::mutate(Scenario = forcats::fct_drop(.data$Scenario))
       
-      # règle année : base=2018, autres=2050
       df_sum %>%
         dplyr::mutate(
           target_year = dplyr::if_else(as.character(.data$Scenario) == scen_base, 2018L, 2050L)
@@ -312,43 +358,21 @@ mod_livestock_animal_products_prod_server <- function(
       # Millions of tonnes
       dfp <- dfp %>% dplyr::mutate(Value_m = .data$Value / 1e6)
       
-      key_from_component <- function(comp){
-        comp <- stringr::str_squish(as.character(comp))
-        
-        dplyr::case_when(
-          comp == "Dairy" ~ "Dairy",
-          
-          stringr::str_starts(comp, "Bovine meat from beef cattle")  ~ "Beef cattle",
-          stringr::str_starts(comp, "Bovine meat from dairy cattle") ~ "Dairy cattle",
-          
-          # tu gardes le nom "from dairy cattle" mais tu le mappe sur une clé palette dédiée
-          stringr::str_starts(comp, "Small ruminants meat from dairy cattle") ~ "Dairy sheep and goats",
-          stringr::str_starts(comp, "Small ruminants meat from meat animals") ~ "Meat sheep and goats",
-          
-          stringr::str_detect(comp, regex("egg", ignore_case = TRUE))     ~ "Poultry eggs",
-          stringr::str_detect(comp, regex("poultry", ignore_case = TRUE)) ~ "Poultry meat",
-          
-          TRUE ~ comp
-        )
-      }
-      
-      
-      comp_levels <- levels(dfp$Component)
-      fill_cols <- if (exists("emissions_animal_colors_for", mode = "function")) {
-        keys <- vapply(comp_levels, key_from_component, FUN.VALUE = character(1))
-        cols_keys <- emissions_animal_colors_for(keys)
-        setNames(unname(cols_keys), comp_levels)
-      } else {
-        setNames(scales::hue_pal()(length(comp_levels)), comp_levels)
-      }
+      # palettes used (also reused to force plotly trace colours post-theme)
+      fill_cols <- NULL
+      item_cols <- NULL
       
       # ---------- Plot ----------
       if (grp == "ruminants") {
+        
+        # SECURE palette: strict fixed mapping for displayed legend items
+        comp_levels <- levels(dfp$Component)
+        fill_cols <- ensure_palette(comp_levels, COMP_COLORS, what = "ruminant components")
+        
         # 3 barres collées au sein de chaque scénario, avec un espace entre scénarios
         scen_lvls <- levels(dfp$Scenario)
         scen_idx  <- match(as.character(dfp$Scenario), scen_lvls)
         
-        # offsets = distance entre centres = largeur => barres collées dans un scénario
         offsets <- c(
           "Bovine meat"          = -0.25,
           "Small ruminants meat" =  0.00,
@@ -376,7 +400,7 @@ mod_livestock_animal_products_prod_server <- function(
             )
           )
         ) +
-          ggplot2::geom_col(width = 0.25) +  # largeur = 0.25 => collé entre items du scénario
+          ggplot2::geom_col(width = 0.25) +
           ggplot2::scale_x_continuous(
             breaks = seq_along(scen_lvls),
             labels = scenario_label(scen_lvls),
@@ -401,15 +425,12 @@ mod_livestock_animal_products_prod_server <- function(
           )
         
       } else {
+        
         pos <- ggplot2::position_dodge2(width = 0.85, preserve = "single", padding = 0)
         item_lvls <- levels(dfp$Item_main)
-        item_cols <- if (exists("emissions_animal_colors_for", mode = "function")) {
-          keys <- vapply(item_lvls, key_from_component, FUN.VALUE = character(1))
-          cols_keys <- emissions_animal_colors_for(keys)
-          setNames(unname(cols_keys), item_lvls)
-        } else {
-          setNames(scales::hue_pal()(length(item_lvls)), item_lvls)
-        }
+        
+        # SECURE palette: either explicit mapping (MONO_ITEM_COLORS) OR deterministic-by-name fallback
+        item_cols <- make_mono_palette(item_lvls)
         
         gg <- ggplot2::ggplot(
           dfp,
@@ -460,8 +481,20 @@ mod_livestock_animal_products_prod_server <- function(
         p <- plotly_theme_transparent(p)
       }
       
+      # ---- FORCE colours AFTER plotly theme (robust local/prod)
+      fixed_pal <- if (grp == "ruminants") fill_cols else item_cols
+      if (!is.null(fixed_pal) && length(fixed_pal) > 0) {
+        for (i in seq_along(p$x$data)) {
+          nm <- p$x$data[[i]]$name
+          if (!is.null(nm) && nzchar(nm) && nm %in% names(fixed_pal)) {
+            p$x$data[[i]]$marker$color <- unname(fixed_pal[nm])
+          }
+        }
+      }
+      
       p
     })
+    
     # -------------------------------------------------
     # Download
     # -------------------------------------------------
@@ -472,13 +505,14 @@ mod_livestock_animal_products_prod_server <- function(
       content = function(file){
         dfp <- data_summarised() %>%
           dplyr::mutate(
-            Scenario = as.character(.data$Scenario),
+            Scenario       = as.character(.data$Scenario),
             Scenario_label = scenario_label(.data$Scenario),
-            Item_main = as.character(.data$Item_main),
-            Component = as.character(.data$Component)
+            Item_main      = as.character(.data$Item_main),
+            Component      = as.character(.data$Component)
           ) %>%
           dplyr::select(Scenario, Scenario_label, Year, Item_main, Component, Value, Unit)
         
+        readr::write_csv(dfp, file)
       }
     )
     

@@ -129,11 +129,15 @@ home_server <- function(id){
             class = "home2-card",
             h2(class = "home2-card-title", "Scenarios 2050"),
             p(
-              "Six scenarios were constructed to model potential tensions on the agricultural and food systems of 45 African countries. ",
-              "There are three basic scenarios (",
-              tags$em("Same diet"), ", ", tags$em("Healthy diet"), ", ", tags$em("Likely diet"),
-              ") in which three potential diets are projected (described in the hypotheses tab). ",
-              "Then, three other scenarios were derived from the diet of the ", tags$em("likely"), " diet scenario by applying different constraints (",
+              "Six scenarios were constructed to simulate potential tensions on the agricultural and food systems of 45 African countries. ",
+              "Three basic scenarios have been built by projecting different food diets in 2050 (",tags$em("Same diet"), ", ", tags$em("Healthy diet"), 
+              ", ", tags$em("Likely diet")," ; described in the hypotheses tab).  These diets imply a certain demand that the supply must balance.
+              The model then calculates agricultural areas, pasture areas, necessary imports and all other elements needed to achieve a balance between 
+              supply and the 2050 demand."
+            ),
+            
+            p(
+              "Then, three other scenarios were derived from the ", tags$em("likely"), " diet scenario by applying different constraints (",
               tags$em("Total area stress"), ", ", tags$em("No deforestation"), ", ", tags$em("Self-sufficiency"),
               ")."
             ),

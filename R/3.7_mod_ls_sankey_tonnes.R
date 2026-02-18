@@ -814,13 +814,6 @@ mod_ls_sankey_tonnes_server <- function(
           use Energy (Gcal) for nutritional interpretation).</li>
     </ul>
 
-    <p><strong>Reading the Sankey</strong></p>
-    <ul>
-      <li>The diagram details the selected scenario (<strong>{sd$scenario_label}</strong>, <strong>{sd$year_used}</strong>).</li>
-      <li>Flows go from <em>Production</em> and <em>Imports</em> to <em>Domestic supply</em> and <em>Exports</em>,
-          and then to final uses (<em>{paste(uses_list, collapse = \"</em>, <em>\")}</em>).</li>
-    </ul>
-
     <p><strong>Show as percentage (%)</strong></p>
     <ul>
       <li><strong>Sources</strong> (left side): percentages at Production and Imports indicate the share of total sources,
@@ -830,12 +823,6 @@ mod_ls_sankey_tonnes_server <- function(
       <li><strong>Uses</strong> (right side): percentages at Food, Feed, Processing, Losses and Other uses (non-food)
           show each use as a share of Domestic supply.</li>
       <li>Tooltips always include underlying volumes in <strong>{sd$unit_label}</strong>.</li>
-    </ul>
-
-    <p><strong>Balancing item</strong></p>
-    <ul>
-      <li><em>Unused</em> is displayed as the balancing item when needed: it captures the residual between <em>Domestic supply</em>
-          and the sum of other internal uses.</li>
     </ul>"
       )
       
