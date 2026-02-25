@@ -57,7 +57,7 @@ home_server <- function(id){
           div(
             p(
               class = "home2-what-text",
-              "This web application provides an interactive, country-by-country exploration of six 2050
+              "This web application provides an interactive, country-by-country exploration of four 2050
               agricultural scenarios in Africa. It helps interpret how different diet scenarios and constraints 
               could shape agricultural balances, land use, trade dependency, and emissions between 2018 (base year) and 2050."
             ),
@@ -106,7 +106,7 @@ home_server <- function(id){
             p(tags$strong("Balance:"), " flows of agricultural product by ressources and uses"),
             p(tags$strong("Dependancy:"), " food and agricultural dependancy indicators"),
             p(tags$strong("Emissions:"), " GHG emissions"),
-            p(tags$strong("Continent:"), " maps at the continent scale"),
+            p(tags$strong("Continent:"), " maps at continent scale"),
             p(tags$strong("About:"), " definitions, methodological notes, raw data."),
           ),
           div(class="home2-divider"),
@@ -129,7 +129,7 @@ home_server <- function(id){
             class = "home2-card",
             h2(class = "home2-card-title", "Scenarios 2050"),
             p(
-              "Six scenarios were constructed to simulate potential tensions on the agricultural and food systems of 45 African countries. ",
+              "Four scenarios were constructed to simulate potential tensions on the agricultural and food systems of 45 African countries. ",
               "Three basic scenarios have been built by projecting different food diets in 2050 (",tags$em("Same diet"), ", ", tags$em("Healthy diet"), 
               ", ", tags$em("Likely diet")," ; described in the hypotheses tab).  These diets imply a certain demand that the supply must balance.
               The model then calculates agricultural areas, pasture areas, necessary imports and all other elements needed to achieve a balance between 
@@ -138,19 +138,19 @@ home_server <- function(id){
             
             p(
               "Then, three other scenarios were derived from the ", tags$em("likely"), " diet scenario by applying different constraints (",
-              tags$em("Total area stress"), ", ", tags$em("No deforestation"), ", ", tags$em("Self-sufficiency"),
-              ")."
+              tags$em("Total area stress"), ")."
+              # , ", tags$em("No deforestation"), ", ", tags$em("Self-sufficiency")," 
             ),
             tags$br(),
             tags$details(
               class = "home2-acc",
               tags$summary(class="home2-acc-sum", "More on derived scenarios (applied to the likely diet)"),
               tags$ul(
-                tags$li(tags$strong("No deforestation:"), " no forest area can be converted into agricultural area. Any additional need for
-                        agricultural land is met by imports"),
+                # tags$li(tags$strong("No deforestation:"), " no forest area can be converted into agricultural area. Any additional need for  
+                #   agricultural land is met by imports"),
                 tags$li(tags$strong("Total area stress:"), " agricultural areas cannot exceed the country’s available area (seen as cropland + pastures and 
                         meadows + forest land). Any additional need for agricultural land is met by imports"),
-                tags$li(tags$strong("Self-sufficiency:"), " cereals and legumes import rates capped at 20% (or base-year level if already above 20%).")
+               # tags$li(tags$strong("Self-sufficiency:"), " cereals and legumes import rates capped at 20% (or base-year level if already above 20%).") 
               )
             ),
             tags$details(

@@ -101,6 +101,37 @@ for (chk in list(
 }
 
 # ===================================================================
+# CONTINENT — PNG maps (scenario code -> filename in www/continent/)
+# ===================================================================
+MAP_CONTINENT_LANDUSE_FILES <- c(
+  "Même diète"     = "Land-use_même_diète.png",
+  "Diète saine"    = "Land-use_diète_saine.png",
+  "Diète probable" = "Land-use_diète_probable.png",
+  "Prob-S-limitee" = "Land-use_diète_contrainte.png"
+)
+
+MAP_CONTINENT_DEPENDANCY_FILES <- c(
+  "Même diète"     = "Variation_même_diète.png",
+  "Diète saine"    = "Variation_diète_saine.png",
+  "Diète probable" = "Variation_diète_probable.png",
+  "Prob-S-limitee" = "Variation_contrainte.png"
+)
+
+MAP_CONTINENT_EMISSIONS_ABSOLU_FILES <- c(
+  "Même diète"     = "Absolu_même_diète.png",
+  "Diète saine"    = "Absolu_diète_saine.png",
+  "Diète probable" = "Absolu_diète_probable.png",
+  "Prob-S-limitee" = "Absolu_diète_contrainte.png"
+)
+
+MAP_CONTINENT_EMISSIONS_VARIATION_FILES <- c(
+  "Même diète"     = "Variation_emissions_même_diète.png",
+  "Diète saine"    = "Variation_emissions_diète_saine.png",
+  "Diète probable" = "Variation_emissions_diète_probable.png",
+  "Prob-S-limitee" = "Variation_emissions_constraint.png"  # attention: "constraint" (EN) dans le nom de fichier
+)
+
+# ===================================================================
 # UI
 # ===================================================================
 ui <- tagList(
@@ -314,11 +345,84 @@ ui <- tagList(
       tabPanel(
         title = "Continent",
         div(class = "container-fluid",
+            
+            # ================= LAND USE =================
             h1(class = "section-title", "LAND USE"),
-            tags$br()
+            selectInput(
+              inputId = "continent_scenario",
+              label   = "Scenario",
+              choices = character(0)
+            ),
+            tags$br(),
+            div(
+              class = "u-card continent-map",
+              h4(class = "u-title", "Land use change between Base year (2018) and 2050 "),
+              div(
+                class = "continent-map-viewport",
+                imageOutput("continent_landuse_map", width = "100%", height = "100%")
+              )
+            ),
+            
+            tags$hr(class = "rule"),
+            
+            # ================= DEPENDENCY =================
+            h1(class = "section-title", "DEPENDENCY"),
+            selectInput(
+              inputId = "continent_dependancy_scenario",
+              label   = "Scenario",
+              choices = character(0)
+            ),
+            tags$br(),
+            div(
+              class = "u-card continent-map",
+              h4(class = "u-title", "Change in import dependency (imports/food + feed + other-uses) in domestic uses between the base year and 2050"),
+              div(
+                class = "continent-map-viewport",
+                imageOutput("continent_dependancy_map", width = "100%", height = "100%")
+              )
+            ),
+            
+            tags$hr(class = "rule"),
+            
+            # ================= EMISSIONS =================
+            h1(class = "section-title", "EMISSIONS"),
+            selectInput(
+              inputId = "continent_emissions_scenario",
+              label   = "Scenario",
+              choices = character(0)
+            ),
+            tags$br(),
+            div(
+              class = "u-row",
+              
+              # Gauche : absolu
+              div(
+                class = "u-box",
+                div(
+                  class = "u-card continent-map",
+                  h4(class = "u-title", "Annual GHG emissions by country in 2050 (in MtCO2e)"),
+                  div(
+                    class = "continent-map-viewport",
+                    imageOutput("continent_emissions_abs_map", width = "100%", height = "100%")
+                  )
+                )
+              ),
+              
+              # Droite : variation
+              div(
+                class = "u-box",
+                div(
+                  class = "u-card continent-map",
+                  h4(class = "u-title", "Change in annual GHG emissions between Base year (2018) and 2050"),
+                  div(
+                    class = "continent-map-viewport",
+                    imageOutput("continent_emissions_var_map", width = "100%", height = "100%")
+                  )
+                )
+              )
+            )
         )
       ),
-      
       # --------- ONGLET 9 : ABOUT ----------
       tabPanel(
         title = "About",
@@ -364,6 +468,10 @@ server <- function(input, output, session){
     r_extra_code = r_extra_code,
     debug        = FALSE
   )
+  r_scenarios_continent <- reactive({
+    # 4 scénarios voulus : 3 diètes + contrainte
+    unique(c(SC$base_diets, SC$extra_codes))
+  })
   
   # Exposition "globale" : ce que tu passes à TOUS les modules
   # (vecteur de CODES à afficher, déjà filtré + extra retiré si redundant)
@@ -673,12 +781,141 @@ mod_dependancy_import_food_items_server(
     r_scenarios = r_scenarios_effective
   )
   
+  
   # =======================
-  # ONGLET 8 - ABOUT
+  # ONGLET 10 — CONTINENT (LAND_USE)
+  # =======================
+  
+  observeEvent(r_scenarios_continent(), {
+    scen_codes <- r_scenarios_continent()
+    req(length(scen_codes) > 0)
+    
+    # Ne proposer que les scénarios pour lesquels une image existe
+    scen_available <- intersect(scen_codes, names(MAP_CONTINENT_LANDUSE_FILES))
+    req(length(scen_available) > 0)
+    
+    updateSelectInput(
+      session,
+      inputId  = "continent_scenario",
+      choices  = setNames(scen_available, scenario_label(scen_available)),
+      selected = scen_available[1]
+    )
+  }, ignoreInit = FALSE)
+  
+  output$continent_landuse_map <- renderImage({
+    req(input$continent_scenario)
+    
+    code <- SC$code(input$continent_scenario)
+    
+    filename <- unname(MAP_CONTINENT_LANDUSE_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping manquant pour : ", code)))
+    
+    # Tes fichiers sont directement dans www/continent/
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(
+      src = abs_path,
+      contentType = "image/png",
+      width = "100%",
+      alt = paste("Land use –", scenario_label(code))
+    )
+  }, deleteFile = FALSE)
+  
+  # =======================
+  #  CONTINENT 
+  # =======================
+  
+  observeEvent(r_scenarios_continent(), {
+    scen_codes <- r_scenarios_continent()
+    req(length(scen_codes) > 0)
+    
+    # Ne proposer que les scénarios pour lesquels une image existe
+    scen_available <- intersect(scen_codes, names(MAP_CONTINENT_DEPENDANCY_FILES))
+    req(length(scen_available) > 0)
+    
+    updateSelectInput(
+      session,
+      inputId  = "continent_dependancy_scenario",
+      choices  = setNames(scen_available, scenario_label(scen_available)),
+      selected = scen_available[1]
+    )
+  }, ignoreInit = FALSE)
+  
+  output$continent_dependancy_map <- renderImage({
+    req(input$continent_dependancy_scenario)
+    
+    code <- SC$code(input$continent_dependancy_scenario)
+    
+    filename <- unname(MAP_CONTINENT_DEPENDANCY_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping manquant pour : ", code)))
+    
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(
+      src = abs_path,
+      contentType = "image/png",
+      width = "100%",
+      alt = paste("Dependancy –", scenario_label(code))
+    )
+  }, deleteFile = FALSE)
+  
+  # =======================
+  #  EMISSIONS 
+  # =======================
+  
+  observeEvent(r_scenarios_continent(), {
+    scen_codes <- r_scenarios_continent()
+    req(length(scen_codes) > 0)
+    
+    # On garde uniquement les scénarios qui ont BIEN les 2 images
+    scen_abs <- intersect(scen_codes, names(MAP_CONTINENT_EMISSIONS_ABSOLU_FILES))
+    scen_var <- intersect(scen_codes, names(MAP_CONTINENT_EMISSIONS_VARIATION_FILES))
+    scen_available <- intersect(scen_abs, scen_var)
+    req(length(scen_available) > 0)
+    
+    updateSelectInput(
+      session,
+      inputId  = "continent_emissions_scenario",
+      choices  = setNames(scen_available, scenario_label(scen_available)),
+      selected = scen_available[1]
+    )
+  }, ignoreInit = FALSE)
+  
+  output$continent_emissions_abs_map <- renderImage({
+    req(input$continent_emissions_scenario)
+    code <- SC$code(input$continent_emissions_scenario)
+    
+    filename <- unname(MAP_CONTINENT_EMISSIONS_ABSOLU_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping absolu manquant pour : ", code)))
+    
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(src = abs_path, contentType = "image/png", width = "100%",
+         alt = paste("Emissions (absolute) –", scenario_label(code)))
+  }, deleteFile = FALSE)
+  
+  output$continent_emissions_var_map <- renderImage({
+    req(input$continent_emissions_scenario)
+    code <- SC$code(input$continent_emissions_scenario)
+    
+    filename <- unname(MAP_CONTINENT_EMISSIONS_VARIATION_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping variation manquant pour : ", code)))
+    
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(src = abs_path, contentType = "image/png", width = "100%",
+         alt = paste("Emissions (variation) –", scenario_label(code)))
+  }, deleteFile = FALSE)
+  
+  # =======================
+  # ONGLET 11 - ABOUT
   # =======================
   
   mod_about_server("about", fact = fact)
-  
   
   .get_fact <- function(x) if (is.function(x)) x() else x
   

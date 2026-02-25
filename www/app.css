@@ -810,3 +810,22 @@ h6,.h6{font-size:var(--title-xs); font-weight:var(--title-weight);margin:var(--t
   box-shadow: none;
 }
 
+/* =========================
+   CONTINENT — Map PNG viewport
+   ========================= */
+
+/* Le wrapper utilise déjà .u-card (fond blanc), ici on ne fait que gérer la hauteur/scroll */
+.app .continent-map-viewport{
+  height: calc(100vh - 100px);  /* ajusteR si besoin */
+  overflow: auto;              
+}
+
+.app #continent_landuse_map img,
+.app #continent_dependancy_map img,
+.app #continent_emissions_abs_map img,
+.app #continent_emissions_var_map img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
