@@ -1,8 +1,7 @@
 # R/2.4_mod_crop_sankey_tonnes.R
 # -------------------------------------------------------------------
 
-# --- Groupes de produits végétaux -------------------------------------------
-CROP_GROUPS <- list(
+CROP_GROUPS_CROP_SANKEY <- list(
   "All crop products" = c(
     "Cake Other Oilcrops","Fibers etc.","Fruits and vegetables",
     "Maize","Millet and Sorghum","Oil Other Oilcrops","Oilpalm fruit",
@@ -16,28 +15,22 @@ CROP_GROUPS <- list(
   "Cereals" = c("Maize", "Millet and Sorghum", "Other cereals", "Rice", "Wheat"),
   "Roots and tubers" = c("Roots and Tuber"),
   "Pulses" = c("Pulses"),
-  "Oilcrops (incl. cakes & oils)" = c(
-    "Cake Other Oilcrops","Oil Other Oilcrops","Oilpalm fruit","Olive Oil",
-    "Olives","Other Oilcrops","Palm Products Oil","Palmkernel Cake",
-    "Rape and Mustard Cake","Rape and Mustard Oil","Rape and Mustardseed",
-    "Soyabean Cake","Soyabean Oil","Soyabeans","Sunflowerseed",
-    "Sunflowerseed Cake","Sunflowerseed Oil"
+  "Oilcrops (primary)" = c(
+    "Oilpalm fruit", "Olives","Other Oilcrops","Rape and Mustardseed","Soyabeans","Sunflowerseed"
   ),
   "Fruits & vegetables" = c("Fruits and vegetables"),
   "Sugar crops"         = c("Sugar plants and products"),
-  "Grass & fodder"      = c("Grass"),
   "Fibres & other products" = c("Fibers etc.", "Other plant products", "Other products")
 )
 
-CROP_LABELS <- c(
+CROP_LABELS_CROP_SANKEY <- c(
   "All crop products"             = "crop products",
   "Cereals"                       = "cereals",
   "Roots and tubers"              = "roots and tubers",
   "Pulses"                        = "pulses",
-  "Oilcrops (incl. cakes & oils)" = "oilcrops",
+  "Oilcrops (primary)"            = "oilcrops",
   "Fruits & vegetables"           = "fruits and vegetables",
   "Sugar crops"                   = "sugar crops",
-  "Grass & fodder"                = "grass and fodder crops",
   "Fibres & other products"       = "fibre and other plant products"
 )
 
@@ -65,7 +58,7 @@ mod_crop_sankey_tonnes_ui <- function(id, plot_height = "500px"){
         tags$label("Select a product group :", `for` = ns("prod_sel"), class = "form-label mb-1"),
         selectInput(
           ns("prod_sel"), NULL,
-          choices  = names(CROP_GROUPS),
+          choices  = names(CROP_GROUPS_CROP_SANKEY),
           selected = "All crop products",
           width    = "220px"
         ),
@@ -187,7 +180,7 @@ mod_crop_sankey_tonnes_server <- function(
         DS = "Energy Domestic supply quantity",
         PROC = "Energy Processing",
         uses = c("Energy Food","Energy Feed","Energy Losses",
-                 "Energy Other uses (non-food)","Energy Unused") # no Energy Processing
+                 "Energy Other uses (non-food)", "Energy Unused", "Energy Processing") # no Energy Processing
       )
     )
     
@@ -199,7 +192,7 @@ mod_crop_sankey_tonnes_server <- function(
       energy = list(
         uses_nodes = c("Food","Feed","Losses","Other uses (non-food)","Unused"),
         uses_fact  = c("Energy Food","Energy Feed","Energy Losses",
-                       "Energy Other uses (non-food)","Energy Unused")
+                       "Energy Other uses (non-food)","Energy Unused", "Energy Processing")
       )
     )
     
@@ -254,12 +247,12 @@ mod_crop_sankey_tonnes_server <- function(
     # -----------------------------------------------------------------------
     items_selected <- reactive({
       grp <- input$prod_sel %||% "All crop products"
-      CROP_GROUPS[[grp]] %||% CROP_GROUPS[["All crop products"]]
+      CROP_GROUPS_CROP_SANKEY[[grp]] %||% CROP_GROUPS_CROP_SANKEY[["All crop products"]]
     })
     
     label_selected <- reactive({
       grp <- input$prod_sel %||% "All crop products"
-      CROP_LABELS[[grp]] %||% "crop products"
+      CROP_LABELS_CROP_SANKEY[[grp]] %||% "crop products"
     })
     
     output$title_domestic <- renderText({
@@ -641,10 +634,10 @@ mod_crop_sankey_tonnes_server <- function(
       
       node_order <- if (identical(um, "energy")) {
         c("Production","Imports","Exports","Domestic supply",
-          "Food","Feed","Losses","Other uses (non-food)","Unused")
+          "Food","Feed","Losses","Other uses (non-food)", "Processing", "Unused")
       } else {
         c("Production","Imports","Exports","Domestic supply",
-          "Feed","Food","Losses","Seed","Other uses (non-food)","Unused")
+          "Feed","Food","Losses","Seed","Other uses (non-food)", "Processing", "Unused")
       }
       
       nodes_core <- node_order[node_order %in% nodes_present]
@@ -928,6 +921,9 @@ mod_crop_sankey_tonnes_server <- function(
     # -----------------------------------------------------------------------
     # Note
     # -----------------------------------------------------------------------
+    # --- Only change: add one sentence in the note (English) --------------------
+    # Replace ONLY the `output$note <- renderUI({ ... })` block by the one below.
+    
     output$note <- renderUI({
       sd <- try(make_sankey_data(), silent = TRUE)
       if (inherits(sd, "try-error") || is.null(sd$nodes) || length(sd$nodes) == 0) return(NULL)
@@ -936,41 +932,50 @@ mod_crop_sankey_tonnes_server <- function(
       
       txt <- glue::glue(
         "<p>
-    This figure shows, for the selected country and product group, how <strong>crop products</strong>
-    flow through the agri-food system in <strong>{unit_txt}</strong>.
-    The tiles indicate the total <strong>domestic supply net of processing</strong> for each scenario in <strong>{sd$unit_label}</strong>.
-    </p>
-    The radio buttons above the chart switch between two representations :
-    </p>
-    <ul>
-      <li><strong>Energy</strong>:
-          flows are expressed in Gcal.
-      <li><strong>Mass</strong>:
-          flows are expressed in tonnes,
-          by summing, for each element, all crop and livestock items
-          (be careful: tonnes aggregate heterogeneous products, so the 
-          largest flows reflect volumes and composition effects;
-          use <em>Energy (Gcal)</em> for nutritional interpretation).</li>
-    </ul>
-    <p>
-      When the option <strong>\"Show as percentage (%)\"</strong> is ticked,
-      node and link information is expressed as shares of three reference poles:
-    </p>
-    <ul>
-      <li><strong>Sources</strong> (left side):
-          the percentages at <em>Production</em> and <em>Imports</em>
-          indicate the share of total sources, i.e. <em>Production + Imports</em>
-          (equivalently <em>Domestic supply + Exports</em>).</li>
-      <li><strong>Market balance</strong> (middle):
-          the percentages at <em>Domestic supply</em> and <em>Exports</em>
-          describe how total marketable quantities (<em>Domestic supply + Exports</em>)
-          are split between internal and external uses.</li>
-      <li><strong>Uses</strong> (right side):
-          the percentages at <em>Food</em>, <em>Feed</em>, <em>Losses</em>,
-          <em>Seed</em> and <em>Other uses (non-food)</em> show each use
-          as a share of <em>Domestic supply</em>.</li>
-    </ul>
-    </p>")
+This figure shows, for the selected country and product group, how <strong>crop products</strong>
+flow through the agri-food system in <strong>{unit_txt}</strong>.
+The tiles indicate the total <strong>domestic supply net of processing</strong> for each scenario in <strong>{sd$unit_label}</strong>.
+</p>
+
+<p>
+If the diagram does not balance well in <strong>energy (Gcal)</strong> for some product groups,
+please switch to <strong>mass (tonnes)</strong> for a more consistent check of the flows.
+</p>
+
+<p>
+The radio buttons above the chart switch between two representations :
+</p>
+<ul>
+  <li><strong>Energy</strong>:
+      flows are expressed in Gcal.</li>
+  <li><strong>Mass</strong>:
+      flows are expressed in tonnes,
+      by summing, for each element, all crop and livestock items
+      (be careful: tonnes aggregate heterogeneous products, so the
+      largest flows reflect volumes and composition effects;
+      use <em>Energy (Gcal)</em> for nutritional interpretation).</li>
+</ul>
+
+<p>
+When the option <strong>\"Show as percentage (%)\"</strong> is ticked,
+node and link information is expressed as shares of three reference poles:
+</p>
+<ul>
+  <li><strong>Sources</strong> (left side):
+      the percentages at <em>Production</em> and <em>Imports</em>
+      indicate the share of total sources, i.e. <em>Production + Imports</em>
+      (equivalently <em>Domestic supply + Exports</em>).</li>
+  <li><strong>Market balance</strong> (middle):
+      the percentages at <em>Domestic supply</em> and <em>Exports</em>
+      describe how total marketable quantities (<em>Domestic supply + Exports</em>)
+      are split between internal and external uses.</li>
+  <li><strong>Uses</strong> (right side):
+      the percentages at <em>Food</em>, <em>Feed</em>, <em>Losses</em>,
+      <em>Seed</em> and <em>Other uses (non-food)</em> show each use
+      as a share of <em>Domestic supply</em>.</li>
+</ul>"
+      )
+      
       htmltools::HTML(txt)
     })
     

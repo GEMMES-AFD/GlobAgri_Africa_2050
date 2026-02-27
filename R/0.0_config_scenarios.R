@@ -1,10 +1,5 @@
 # R/0.0_config_scenarios.R
-# Ce module permet de centraliser l'ordre et le nom des scénarios. Ainsi les noms, l'ordre peuvent être changés pour toute l'application !
-# Par ailleurs, ce module nous permet de définir le coefficient qui determine si 2 scénarios sont redondants 
-# ce qui conditionne ensuite l'affichage : aujourd'hui, il est à 00.5 
-# ============================================================
-# SINGLE SOURCE OF TRUTH — SCENARIOS (CODES in data, LABELS in UI)
-# ============================================================
+
 
 # 0) Normalisation (anti-espaces, anti-facteurs)
 scenario_code <- function(x) {
