@@ -36,7 +36,7 @@ if (!exists("default_country")) default_country <- sort(unique(fact$Region))[1]
 # Fallback si scenario_code n'est pas encore défini par tes sources
 if (!exists("scenario_code", mode = "function")) {
   scenario_code <- function(x) stringr::str_squish(as.character(x))
-}
+} 
 
 # map label UI (présent dans tes données actuellement) -> code data
 # ex: "Avec contrainte" -> "Prob-S-limitee"
