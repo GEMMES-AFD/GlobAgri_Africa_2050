@@ -78,7 +78,6 @@ mod_emissions_stacked_server <- function(
       "Livestock other"                                 = "#9C755F",
       "Production and application of fertilizer and pesticides" = "#F28E2B",
       "Energy for crops"                                = "#4E79A7",
-      "Rice cultivation"                                = "#EDC948",
       
       "Manure management"                               = "#76B7B2",
       "Energy"                                          = "#1F77B4",

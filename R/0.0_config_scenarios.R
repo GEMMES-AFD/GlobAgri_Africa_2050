@@ -1,5 +1,10 @@
 # R/0.0_config_scenarios.R
-
+# Ce module permet de centraliser l'ordre et le nom des scénarios. Ainsi les noms, l'ordre peuvent être changés pour toute l'application !
+# Par ailleurs, ce module nous permet de définir le coefficient qui determine si 2 scénarios sont redondants 
+# ce qui conditionne ensuite l'affichage : aujourd'hui, il est à 00.5 
+# ============================================================
+# SINGLE SOURCE OF TRUTH — SCENARIOS (CODES in data, LABELS in UI)
+# ============================================================
 
 # 0) Normalisation (anti-espaces, anti-facteurs)
 scenario_code <- function(x) {
@@ -21,7 +26,9 @@ SCENARIO_REF_CODE <- scenario_code("Diète probable")
 
 # 2) Nom du selecteur ! Extras : CODES uniquement (les noms sont des labels UI)
 SCENARIOS_EXTRA_CHOICES <- c(
-  "Total area stress" = "Prob-S-limitee"
+  "Total area stress" = "Prob-S-limitee",
+"Forest preserved" = "100% forêt conservée",
+ "Cereals selfsuf." = "80% autosuff_céréales" 
 )
 SCENARIOS_EXTRA_CODES <- scenario_code(unname(SCENARIOS_EXTRA_CHOICES))
 
@@ -31,7 +38,9 @@ SCENARIO_LABELS <- c(
   "Même diète"     = "Same diet",
   "Diète saine"    = "Healthy diet",
   "Diète probable" = "Likely diet",
-  "Prob-S-limitee" = "Total area stress"
+  "Prob-S-limitee" = "Total area stress",
+  "100% forêt conservée" = "Forest preserved",
+ "80% autosuff_céréales" = "Cereals selfsuf."
 )
 
 scenario_label <- function(code){
