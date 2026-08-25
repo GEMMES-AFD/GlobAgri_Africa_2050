@@ -1,4 +1,4 @@
-# app.R — AFD Valorisation (Aperçu + Surface + KPI pays)
+# app.R — AFD Valorisation (Aperçu + Surface + KPI pays) 
 # ======================================================
 
 library(shiny)
