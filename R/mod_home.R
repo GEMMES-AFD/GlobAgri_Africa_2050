@@ -76,7 +76,7 @@ home_server <- function(id){
         
       } else if (identical(input$section, "how")) {
         
-        # HOW TO USE view (inchangé)
+        # HOW TO USE view
         tagList(
           tags$br(),
           div(
@@ -86,8 +86,11 @@ home_server <- function(id){
               class = "home2-ol",
               tags$li(tags$strong("Select a country (top banner)"), tags$br(),
                       span("The selected country acts as a global filter and is automatically applied to all charts.")),
-              tags$li(tags$strong("Select an additional scenario (top banner)"), tags$br(),
-                      span("The three diet scenarios are always displayed; you can add one derived scenario via the selector.")),
+              tags$li(tags$strong("Select a scenario view (top banner)"), tags$br(),
+                      span("Choose between two views: ", tags$em("Comparison of diets"), 
+                           " (base year and the three 2050 diet scenarios) or ", 
+                           tags$em("Land constraints or self-sufficiency"), 
+                           " (base year, the likely diet, and the derived constraint scenarios).")),
               tags$li(tags$strong("Navigate by tabs"), tags$br(),
                       span("Each tab provides a dedicated view of results (assumptions, synthesis, crops, livestock, land use, trade, emissions).")),
               tags$li(tags$strong("Use chart interactivity"), tags$br(),
@@ -122,14 +125,14 @@ home_server <- function(id){
         
       } else {
         
-        # SCENARIOS view (inchangé)
+        # SCENARIOS view
         tagList(
           tags$br(),
           div(
             class = "home2-card",
             h2(class = "home2-card-title", "Scenarios 2050"),
             p(
-              "Four scenarios were constructed to simulate potential tensions on the agricultural and food systems of 45 African countries. ",
+              "Several scenarios were constructed to simulate potential tensions on the agricultural and food systems of 45 African countries. ",
               "Three basic scenarios have been built by projecting different food diets in 2050 (",tags$em("Same diet"), ", ", tags$em("Healthy diet"), 
               ", ", tags$em("Likely diet")," ; described in the hypotheses tab).  These diets imply a certain demand that the supply must balance.
               The model then calculates agricultural areas, pasture areas, necessary imports and all other elements needed to achieve a balance between 
@@ -137,20 +140,27 @@ home_server <- function(id){
             ),
             
             p(
-              "Then, three other scenarios were derived from the ", tags$em("likely"), " diet scenario by applying different constraints (",
-              tags$em("Total area stress"), ")."
-              # , ", tags$em("No deforestation"), ", ", tags$em("Self-sufficiency")," 
+              "Then, additional scenarios were derived from the ", tags$em("likely"), " diet scenario by applying different constraints (",
+              tags$em("Total area stress"), ", ", tags$em("Forest preserved"), ", ", tags$em("Cereals self-sufficiency"), ")."
             ),
+            
+            p(
+              "Results can be explored through two views, selectable in the top banner: ", 
+              tags$strong("Comparison of diets"), " (base year and the three diet scenarios), and ",
+              tags$strong("Land constraints or self-sufficiency"), 
+              " (base year, the likely diet, and the derived constraint scenarios)."
+            ),
+            
             tags$br(),
             tags$details(
               class = "home2-acc",
               tags$summary(class="home2-acc-sum", "More on derived scenarios (applied to the likely diet)"),
               tags$ul(
-                # tags$li(tags$strong("No deforestation:"), " no forest area can be converted into agricultural area. Any additional need for  
-                #   agricultural land is met by imports"),
                 tags$li(tags$strong("Total area stress:"), " agricultural areas cannot exceed the country’s available area (seen as cropland + pastures and 
                         meadows + forest land). Any additional need for agricultural land is met by imports"),
-               # tags$li(tags$strong("Self-sufficiency:"), " cereals and legumes import rates capped at 20% (or base-year level if already above 20%).") 
+                tags$li(tags$strong("Forest preserved:"), " no forest area can be converted into agricultural area. Any additional need for  
+                  agricultural land is met by imports"),
+                tags$li(tags$strong("Cereals self-sufficiency:"), " cereals and legumes import rates capped at 20% (or base-year level if already above 20%).")
               )
             ),
             tags$details(
@@ -182,3 +192,4 @@ home_server <- function(id){
     
   })
 }
+

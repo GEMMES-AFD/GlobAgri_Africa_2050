@@ -77,8 +77,13 @@ scenarios_context_server <- function(
   EXTRA_LABEL_TO_CODE <- if (length(extra_choices)) setNames(unname(extra_choices), names(extra_choices)) else NULL
 
   # Normalisation du code de vue choisi
+  # IMPORTANT : on n'utilise PAS scenario_code() ici, car cette fonction remplace
+  # les "_" par des "-" (utile pour matcher fact$Scenario, ex: "Prob-S-limitee"),
+  # alors que les codes de VUE ("comparaison_dietes", "contraintes_terre_autosuffisance")
+  # utilisent volontairement des underscores et doivent matcher tels quels les noms
+  # de SCENARIO_VIEW_CODES dans le config.
   r_view_code_norm <- shiny::reactive({
-    scenario_code(r_view_code())
+    stringr::str_squish(as.character(r_view_code()))
   })
 
   # Codes de scénarios définis par la vue choisie (ordre conservé)

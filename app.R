@@ -164,9 +164,9 @@ ui <- tagList(
                     tags$div(style = "height:10px;"),  # petit espace
                     
                     selectInput(
-                      "extra_scenario_global", "Select a scenario",
-                      choices  = SCENARIOS_EXTRA_CHOICES,
-                      selected = unname(SCENARIOS_EXTRA_CHOICES)[1]
+                      "scenario_view_global", "Select a scenario",
+                      choices  = SC$view_choices,
+                      selected = unname(SC$view_choices)[1]
                     )
                   ),
                   
@@ -457,16 +457,16 @@ server <- function(input, output, session){
   # Pays GLOBAL (fallback si header masqué)
   r_country <- reactive(input$country_global %||% default_country)
   
-  # Extra (le sélecteur renvoie un CODE, ex: "Prob-S-limitee")
-  r_extra_code <- reactive(input$extra_scenario_global %||% unname(SCENARIOS_EXTRA_CHOICES)[1])
+  # Vue (le sélecteur renvoie un CODE de vue, ex: "comparaison_dietes")
+  r_view_code <- reactive(input$scenario_view_global %||% unname(SC$view_choices)[1])
   
   # Objet "scénarios" central (actifs/effectifs/redondance/labels)
   # tol_rel N'EST PLUS passé ici : il est lu depuis le config par le helper.
   sc <- scenarios_context_server(
-    fact         = fact,
-    r_country    = r_country,
-    r_extra_code = r_extra_code,
-    debug        = FALSE
+    fact        = fact,
+    r_country   = r_country,
+    r_view_code = r_view_code,
+    debug       = FALSE
   )
   r_scenarios_continent <- reactive({
     # 4 scénarios voulus : 3 diètes + contrainte
@@ -474,32 +474,37 @@ server <- function(input, output, session){
   })
   
   # Exposition "globale" : ce que tu passes à TOUS les modules
-  # (vecteur de CODES à afficher, déjà filtré + extra retiré si redundant)
+  # (vecteur de CODES à afficher, déjà filtré + extras redondants retirés)
   r_scenarios_effective <- sc$r_scenarios_effective
   
   # (Optionnel mais souvent utile) : niveaux ordonnés stables, restreints aux effectifs
   r_scen_levels_effective <- sc$r_scen_levels_effective
   
   # (Optionnel) : si tu as besoin ailleurs
-  r_extra_code_norm <- sc$r_extra_code_norm
-  r_extra_status    <- sc$r_extra_status
+  r_view_code_norm <- sc$r_view_code_norm
+  r_extras_status  <- sc$r_extras_status
   
-  # --- Banner : UNIQUEMENT si redundant (décision prise par le helper)
+  # --- Banner : liste chaque extra de la vue courante marqué "redundant"
   output$extra_scenario_banner <- renderUI({
-    if (!identical(sc$r_extra_status(), "redundant")) return(NULL)
+    status <- sc$r_extras_status()
+    redundant <- names(status)[status == "redundant"]
+    if (length(redundant) == 0) return(NULL)
     
-    extra_lbl <- scenario_label(sc$r_extra_code_norm())
-    ref_lbl   <- scenario_label(sc$scen_ref)
+    ref_lbl <- scenario_label(sc$scen_ref)
     
-    tags$p(
-      class = "extra-scenario-note",
-      tags$em(
-        paste0(
-          "The constraint is not reached so the additional scenario (",
-          extra_lbl,
-          ") is equivalent to the likely diet. Therefore, it is not displayed."
+    tagList(
+      lapply(redundant, function(code){
+        tags$p(
+          class = "extra-scenario-note",
+          tags$em(
+            paste0(
+              "The constraint is not reached so the additional scenario (",
+              scenario_label(code),
+              ") is equivalent to the likely diet. Therefore, it is not displayed."
+            )
+          )
         )
-      )
+      })
     )
   })
   
