@@ -177,13 +177,10 @@ ui <- tagList(
                     ),
                     tags$div(style = "height:10px;"),  # petit espace
                     
-                    conditionalPanel(
-                      condition = "input.main_tabs !== 'Continent'",
-                      selectInput(
-                        "scenario_view_global", "Select a scenario",
-                        choices  = SC$view_choices,
-                        selected = unname(SC$view_choices)[1]
-                      )
+                    selectInput(
+                      "scenario_view_global", "Select a scenario",
+                      choices  = SC$view_choices,
+                      selected = unname(SC$view_choices)[1]
                     )
                   ),
                   

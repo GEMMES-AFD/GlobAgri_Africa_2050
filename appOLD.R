@@ -103,46 +103,32 @@ for (chk in list(
 # ===================================================================
 # CONTINENT — PNG maps (scenario code -> filename in www/continent/)
 # ===================================================================
-# NOTE : les clés doivent matcher EXACTEMENT les codes normalisés (cf. SC$extra_codes /
-# scenario_code()). Pour "80% autosuff_céréales", scenario_code() remplace le "_" par un "-",
-# d'où la clé "80% autosuff-céréales" ci-dessous (et NON "..._céréales" avec underscore).
-# Adaptez les noms de fichiers (partie droite) aux vrais fichiers PNG que vous placerez
-# dans www/continent/.
-
 MAP_CONTINENT_LANDUSE_FILES <- c(
-  "Même diète"              = "Land-use_même_diète.png",
-  "Diète saine"             = "Land-use_diète_saine.png",
-  "Diète probable"          = "Land-use_diète_probable.png",
-  "Prob-S-limitee"          = "Land-use_diète_contrainte.png",
-  "100% forêt conservée"    = "Land-use_foret_preservee.png",
-  "80% autosuff-céréales"   = "Land-use_autosuffisance_cereales.png"
+  "Même diète"     = "Land-use_même_diète.png",
+  "Diète saine"    = "Land-use_diète_saine.png",
+  "Diète probable" = "Land-use_diète_probable.png",
+  "Prob-S-limitee" = "Land-use_diète_contrainte.png"
 )
 
 MAP_CONTINENT_DEPENDANCY_FILES <- c(
-  "Même diète"              = "Variation_même_diète.png",
-  "Diète saine"             = "Variation_diète_saine.png",
-  "Diète probable"          = "Variation_diète_probable.png",
-  "Prob-S-limitee"          = "Variation_contrainte.png",
-  "100% forêt conservée"    = "Variation_foret_preservee.png",
-  "80% autosuff-céréales"   = "Variation_autosuffisance_cereales.png"
+  "Même diète"     = "Variation_même_diète.png",
+  "Diète saine"    = "Variation_diète_saine.png",
+  "Diète probable" = "Variation_diète_probable.png",
+  "Prob-S-limitee" = "Variation_contrainte.png"
 )
 
 MAP_CONTINENT_EMISSIONS_ABSOLU_FILES <- c(
-  "Même diète"              = "Absolu_même_diète.png",
-  "Diète saine"             = "Absolu_diète_saine.png",
-  "Diète probable"          = "Absolu_diète_probable.png",
-  "Prob-S-limitee"          = "Absolu_diète_contrainte.png",
-  "100% forêt conservée"    = "Absolu_foret_preservee.png",
-  "80% autosuff-céréales"   = "Absolu_autosuffisance_cereales.png"
+  "Même diète"     = "Absolu_même_diète.png",
+  "Diète saine"    = "Absolu_diète_saine.png",
+  "Diète probable" = "Absolu_diète_probable.png",
+  "Prob-S-limitee" = "Absolu_diète_contrainte.png"
 )
 
 MAP_CONTINENT_EMISSIONS_VARIATION_FILES <- c(
-  "Même diète"              = "Variation_emissions_même_diète.png",
-  "Diète saine"             = "Variation_emissions_diète_saine.png",
-  "Diète probable"          = "Variation_emissions_diète_probable.png",
-  "Prob-S-limitee"          = "Variation_emissions_constraint.png",  # attention: "constraint" (EN) dans le nom de fichier
-  "100% forêt conservée"    = "Variation_emissions_foret_preservee.png",
-  "80% autosuff-céréales"   = "Variation_emissions_autosuffisance_cereales.png"
+  "Même diète"     = "Variation_emissions_même_diète.png",
+  "Diète saine"    = "Variation_emissions_diète_saine.png",
+  "Diète probable" = "Variation_emissions_diète_probable.png",
+  "Prob-S-limitee" = "Variation_emissions_constraint.png"  # attention: "constraint" (EN) dans le nom de fichier
 )
 
 # ===================================================================
@@ -177,13 +163,10 @@ ui <- tagList(
                     ),
                     tags$div(style = "height:10px;"),  # petit espace
                     
-                    conditionalPanel(
-                      condition = "input.main_tabs !== 'Continent'",
-                      selectInput(
-                        "scenario_view_global", "Select a scenario",
-                        choices  = SC$view_choices,
-                        selected = unname(SC$view_choices)[1]
-                      )
+                    selectInput(
+                      "scenario_view_global", "Select a scenario",
+                      choices  = SC$view_choices,
+                      selected = unname(SC$view_choices)[1]
                     )
                   ),
                   
@@ -363,16 +346,14 @@ ui <- tagList(
         title = "Continent",
         div(class = "container-fluid",
             
-            # ================= SELECTEUR UNIQUE (LAND USE / DEPENDENCY / EMISSIONS) =================
+            # ================= LAND USE =================
+            h1(class = "section-title", "LAND USE"),
             selectInput(
-              inputId = "continent_scenario_global",
+              inputId = "continent_scenario",
               label   = "Scenario",
               choices = character(0)
             ),
             tags$br(),
-            
-            # ================= LAND USE =================
-            h1(class = "section-title", "LAND USE"),
             div(
               class = "u-card continent-map",
               h4(class = "u-title", "Land use change between Base year (2018) and 2050 "),
@@ -386,6 +367,12 @@ ui <- tagList(
             
             # ================= DEPENDENCY =================
             h1(class = "section-title", "DEPENDENCY"),
+            selectInput(
+              inputId = "continent_dependancy_scenario",
+              label   = "Scenario",
+              choices = character(0)
+            ),
+            tags$br(),
             div(
               class = "u-card continent-map",
               h4(class = "u-title", "Change in import dependency (imports/food + feed + other-uses) in domestic uses between the base year and 2050"),
@@ -399,6 +386,11 @@ ui <- tagList(
             
             # ================= EMISSIONS =================
             h1(class = "section-title", "EMISSIONS"),
+            selectInput(
+              inputId = "continent_emissions_scenario",
+              label   = "Scenario",
+              choices = character(0)
+            ),
             tags$br(),
             div(
               class = "u-row",
@@ -477,8 +469,7 @@ server <- function(input, output, session){
     debug       = FALSE
   )
   r_scenarios_continent <- reactive({
-    # 6 scénarios voulus : 3 diètes (same/healthy/likely) + 3 dérivés
-    # (total area stress, forest preserved, cereal selfsuf)
+    # 4 scénarios voulus : 3 diètes + contrainte
     unique(c(SC$base_diets, SC$extra_codes))
   })
   
@@ -797,27 +788,29 @@ mod_dependancy_import_food_items_server(
   
   
   # =======================
-  # ONGLET 10 — CONTINENT (sélecteur unique pour les 3 rubriques)
+  # ONGLET 10 — CONTINENT (LAND_USE)
   # =======================
   
   observeEvent(r_scenarios_continent(), {
     scen_codes <- r_scenarios_continent()
     req(length(scen_codes) > 0)
     
-    # On propose tous les scénarios de la rubrique continent (3 diètes + 3 dérivés) ;
-    # chaque renderImage gère individuellement le cas où l'image manque pour sa propre rubrique.
+    # Ne proposer que les scénarios pour lesquels une image existe
+    scen_available <- intersect(scen_codes, names(MAP_CONTINENT_LANDUSE_FILES))
+    req(length(scen_available) > 0)
+    
     updateSelectInput(
       session,
-      inputId  = "continent_scenario_global",
-      choices  = setNames(scen_codes, scenario_label(scen_codes)),
-      selected = scen_codes[1]
+      inputId  = "continent_scenario",
+      choices  = setNames(scen_available, scenario_label(scen_available)),
+      selected = scen_available[1]
     )
   }, ignoreInit = FALSE)
   
   output$continent_landuse_map <- renderImage({
-    req(input$continent_scenario_global)
+    req(input$continent_scenario)
     
-    code <- SC$code(input$continent_scenario_global)
+    code <- SC$code(input$continent_scenario)
     
     filename <- unname(MAP_CONTINENT_LANDUSE_FILES[code])
     validate(need(!is.na(filename) && filename != "", paste0("Mapping manquant pour : ", code)))
@@ -834,10 +827,30 @@ mod_dependancy_import_food_items_server(
     )
   }, deleteFile = FALSE)
   
-  output$continent_dependancy_map <- renderImage({
-    req(input$continent_scenario_global)
+  # =======================
+  #  CONTINENT 
+  # =======================
+  
+  observeEvent(r_scenarios_continent(), {
+    scen_codes <- r_scenarios_continent()
+    req(length(scen_codes) > 0)
     
-    code <- SC$code(input$continent_scenario_global)
+    # Ne proposer que les scénarios pour lesquels une image existe
+    scen_available <- intersect(scen_codes, names(MAP_CONTINENT_DEPENDANCY_FILES))
+    req(length(scen_available) > 0)
+    
+    updateSelectInput(
+      session,
+      inputId  = "continent_dependancy_scenario",
+      choices  = setNames(scen_available, scenario_label(scen_available)),
+      selected = scen_available[1]
+    )
+  }, ignoreInit = FALSE)
+  
+  output$continent_dependancy_map <- renderImage({
+    req(input$continent_dependancy_scenario)
+    
+    code <- SC$code(input$continent_dependancy_scenario)
     
     filename <- unname(MAP_CONTINENT_DEPENDANCY_FILES[code])
     validate(need(!is.na(filename) && filename != "", paste0("Mapping manquant pour : ", code)))
@@ -853,9 +866,31 @@ mod_dependancy_import_food_items_server(
     )
   }, deleteFile = FALSE)
   
+  # =======================
+  #  EMISSIONS 
+  # =======================
+  
+  observeEvent(r_scenarios_continent(), {
+    scen_codes <- r_scenarios_continent()
+    req(length(scen_codes) > 0)
+    
+    # On garde uniquement les scénarios qui ont BIEN les 2 images
+    scen_abs <- intersect(scen_codes, names(MAP_CONTINENT_EMISSIONS_ABSOLU_FILES))
+    scen_var <- intersect(scen_codes, names(MAP_CONTINENT_EMISSIONS_VARIATION_FILES))
+    scen_available <- intersect(scen_abs, scen_var)
+    req(length(scen_available) > 0)
+    
+    updateSelectInput(
+      session,
+      inputId  = "continent_emissions_scenario",
+      choices  = setNames(scen_available, scenario_label(scen_available)),
+      selected = scen_available[1]
+    )
+  }, ignoreInit = FALSE)
+  
   output$continent_emissions_abs_map <- renderImage({
-    req(input$continent_scenario_global)
-    code <- SC$code(input$continent_scenario_global)
+    req(input$continent_emissions_scenario)
+    code <- SC$code(input$continent_emissions_scenario)
     
     filename <- unname(MAP_CONTINENT_EMISSIONS_ABSOLU_FILES[code])
     validate(need(!is.na(filename) && filename != "", paste0("Mapping absolu manquant pour : ", code)))
@@ -868,8 +903,8 @@ mod_dependancy_import_food_items_server(
   }, deleteFile = FALSE)
   
   output$continent_emissions_var_map <- renderImage({
-    req(input$continent_scenario_global)
-    code <- SC$code(input$continent_scenario_global)
+    req(input$continent_emissions_scenario)
+    code <- SC$code(input$continent_emissions_scenario)
     
     filename <- unname(MAP_CONTINENT_EMISSIONS_VARIATION_FILES[code])
     validate(need(!is.na(filename) && filename != "", paste0("Mapping variation manquant pour : ", code)))
