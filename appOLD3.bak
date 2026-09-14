@@ -6,7 +6,6 @@ library(dplyr); library(forcats); library(tidyr)
 library(ggplot2); library(plotly); library(scales)
 library(stringr); library(shinyWidgets); library(DT)
 library(readr); library(tibble)
-library(sf)
 
 # ---- help_type
 ht <- getOption("help_type")
@@ -102,48 +101,48 @@ for (chk in list(
 }
 
 # ===================================================================
-# CONTINENT — Données pour les cartes calculées (shapefile + BDD_CLEAN.csv)
-# Les fonctions load_*() et compute_*_map() / plot_continent_choropleth()
-# sont définies dans R/20_continent_maps.R (déjà sourcé à ce stade).
+# CONTINENT — PNG maps (scenario code -> filename in www/continent/)
 # ===================================================================
+# NOTE : les clés doivent matcher EXACTEMENT les codes normalisés (cf. SC$extra_codes /
+# scenario_code()). Pour "80% autosuff_céréales", scenario_code() remplace le "_" par un "-",
+# d'où la clé "80% autosuff-céréales" ci-dessous (et NON "..._céréales" avec underscore).
+# Adaptez les noms de fichiers (partie droite) aux vrais fichiers PNG que vous placerez
+# dans www/continent/.
 
-# Table de correspondance Region (nom anglais, comme dans BDD_CLEAN.csv et fact$Region)
-# -> code(s) ISO_3 pour la jointure avec le fond de carte. Une Region peut
-# pointer vers PLUSIEURS ISO_3 (ex: "North and South Sudan").
-# ⚠️ Vérifiez cette liste par rapport à unique(fact$Region) / au message
-# "Region(s) sans correspondance ISO_3" affiché en console au démarrage.
-REGION_TO_ISO3 <- list(
-  "Senegal"="SEN","Ivory Coast"="CIV","Ethiopia"="ETH","Morocco"="MAR","South Africa"="ZAF",
-  "Tanzania"="TZA","Nigeria"="NGA","Tunisia"="TUN","Algeria"="DZA","Angola"="AGO",
-  "Benin"="BEN","Botswana"="BWA","Burkina Faso"="BFA","Cameroon"="CMR","Chad"="TCD",
-  "Egypt"="EGY","Gambia"="GMB","Ghana"="GHA","Guinea"="GIN","Kenya"="KEN","Mali"="MLI",
-  "Mozambique"="MOZ","Namibia"="NAM","Niger"="NER",
-  "North and South Sudan"=c("SDN","SSD"),
-  "Rwanda"="RWA","Zambia"="ZMB","Zimbabwe"="ZWE","Burundi"="BDI",
-  "Central African Republic"="CAF","Comoros"="COM","Congo"="COG","Djibouti"="DJI",
-  "Eswatini"="SWZ","Gabon"="GAB","Guinea-Bissau"="GNB","Lesotho"="LSO","Liberia"="LBR",
-  "Libya"="LBY","Malawi"="MWI","Mauritania"="MRT","Sierra Leone"="SLE","Togo"="TGO",
-  "Uganda"="UGA","Democratic Republic of the Congo"="COD","United Republic of Tanzania"="TZA"
+MAP_CONTINENT_LANDUSE_FILES <- c(
+  "Même diète"              = "Land-use_même_diète.png",
+  "Diète saine"             = "Land-use_diète_saine.png",
+  "Diète probable"          = "Land-use_diète_probable.png",
+  "Prob-S-limitee"          = "Land-use_diète_contrainte.png",
+  "100% forêt conservée"    = "Land-use_foret_preservee.png",
+  "80% autosuff-céréales"   = "Land-use_autosuffisance_cereales.png"
 )
 
-# ⚠️ Adaptez ces 2 chemins si vos fichiers ne sont pas à cet emplacement.
-SHAPEFILE_PATH  <- "ne_10m_admin_0_countries.shp"
-BDD_CLEAN_PATH  <- file.path("data_raw", "BDD_CLEAN.csv")
-
-continent_shp <- tryCatch(
-  load_continent_shapefile(SHAPEFILE_PATH),
-  error = function(e) {
-    message("Impossible de charger le shapefile continent : ", conditionMessage(e))
-    NULL
-  }
+MAP_CONTINENT_DEPENDANCY_FILES <- c(
+  "Même diète"              = "Variation_même_diète.png",
+  "Diète saine"             = "Variation_diète_saine.png",
+  "Diète probable"          = "Variation_diète_probable.png",
+  "Prob-S-limitee"          = "Variation_contrainte.png",
+  "100% forêt conservée"    = "Variation_foret_preservee.png",
+  "80% autosuff-céréales"   = "Variation_autosuffisance_cereales.png"
 )
 
-bdd_clean <- tryCatch(
-  load_bdd_clean(BDD_CLEAN_PATH, region_to_iso3 = REGION_TO_ISO3),
-  error = function(e) {
-    message("Impossible de charger BDD_CLEAN.csv : ", conditionMessage(e))
-    NULL
-  }
+MAP_CONTINENT_EMISSIONS_ABSOLU_FILES <- c(
+  "Même diète"              = "Absolu_même_diète.png",
+  "Diète saine"             = "Absolu_diète_saine.png",
+  "Diète probable"          = "Absolu_diète_probable.png",
+  "Prob-S-limitee"          = "Absolu_diète_contrainte.png",
+  "100% forêt conservée"    = "Absolu_foret_preservee.png",
+  "80% autosuff-céréales"   = "Absolu_autosuffisance_cereales.png"
+)
+
+MAP_CONTINENT_EMISSIONS_VARIATION_FILES <- c(
+  "Même diète"              = "Variation_emissions_même_diète.png",
+  "Diète saine"             = "Variation_emissions_diète_saine.png",
+  "Diète probable"          = "Variation_emissions_diète_probable.png",
+  "Prob-S-limitee"          = "Variation_emissions_constraint.png",  # attention: "constraint" (EN) dans le nom de fichier
+  "100% forêt conservée"    = "Variation_emissions_foret_preservee.png",
+  "80% autosuff-céréales"   = "Variation_emissions_autosuffisance_cereales.png"
 )
 
 # ===================================================================
@@ -379,7 +378,7 @@ ui <- tagList(
               h4(class = "u-title", "Land use change between Base year (2018) and 2050 "),
               div(
                 class = "continent-map-viewport",
-                plotOutput("continent_landuse_map", width = "100%", height = "500px")
+                imageOutput("continent_landuse_map", width = "100%", height = "100%")
               )
             ),
             
@@ -392,7 +391,7 @@ ui <- tagList(
               h4(class = "u-title", "Change in import dependency (imports/food + feed + other-uses) in domestic uses between the base year and 2050"),
               div(
                 class = "continent-map-viewport",
-                plotOutput("continent_dependancy_map", width = "100%", height = "500px")
+                imageOutput("continent_dependancy_map", width = "100%", height = "100%")
               )
             ),
             
@@ -412,7 +411,7 @@ ui <- tagList(
                   h4(class = "u-title", "Annual GHG emissions by country in 2050 (in MtCO2e)"),
                   div(
                     class = "continent-map-viewport",
-                    plotOutput("continent_emissions_abs_map", width = "100%", height = "450px")
+                    imageOutput("continent_emissions_abs_map", width = "100%", height = "100%")
                   )
                 )
               ),
@@ -425,7 +424,7 @@ ui <- tagList(
                   h4(class = "u-title", "Change in annual GHG emissions between Base year (2018) and 2050"),
                   div(
                     class = "continent-map-viewport",
-                    plotOutput("continent_emissions_var_map", width = "100%", height = "450px")
+                    imageOutput("continent_emissions_var_map", width = "100%", height = "100%")
                   )
                 )
               )
@@ -798,13 +797,15 @@ mod_dependancy_import_food_items_server(
   
   
   # =======================
-  # ONGLET 10 — CONTINENT (sélecteur unique + cartes calculées dynamiquement)
+  # ONGLET 10 — CONTINENT (sélecteur unique pour les 3 rubriques)
   # =======================
   
   observeEvent(r_scenarios_continent(), {
     scen_codes <- r_scenarios_continent()
     req(length(scen_codes) > 0)
     
+    # On propose tous les scénarios de la rubrique continent (3 diètes + 3 dérivés) ;
+    # chaque renderImage gère individuellement le cas où l'image manque pour sa propre rubrique.
     updateSelectInput(
       session,
       inputId  = "continent_scenario_global",
@@ -813,71 +814,72 @@ mod_dependancy_import_food_items_server(
     )
   }, ignoreInit = FALSE)
   
-  # Garde-fou commun : shapefile / BDD_CLEAN chargés avec succès ?
-  req_continent_data <- function(){
-    validate(need(!is.null(continent_shp), "Fond de carte introuvable (voir SHAPEFILE_PATH dans app.R)."))
-    validate(need(!is.null(bdd_clean), "BDD_CLEAN.csv introuvable ou illisible (voir BDD_CLEAN_PATH dans app.R)."))
-  }
-  
-  output$continent_landuse_map <- renderPlot({
+  output$continent_landuse_map <- renderImage({
     req(input$continent_scenario_global)
-    req_continent_data()
     
     code <- SC$code(input$continent_scenario_global)
-    df   <- compute_landuse_map(bdd_clean, code)
     
-    plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("Land use – ", scenario_label(code)),
-      spec  = LANDUSE_SPEC
+    filename <- unname(MAP_CONTINENT_LANDUSE_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping manquant pour : ", code)))
+    
+    # Tes fichiers sont directement dans www/continent/
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(
+      src = abs_path,
+      contentType = "image/png",
+      width = "100%",
+      alt = paste("Land use –", scenario_label(code))
     )
-  })
+  }, deleteFile = FALSE)
   
-  output$continent_dependancy_map <- renderPlot({
+  output$continent_dependancy_map <- renderImage({
     req(input$continent_scenario_global)
-    req_continent_data()
     
     code <- SC$code(input$continent_scenario_global)
-    df   <- compute_dependency_map(bdd_clean, code)
     
-    plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("Import dependency – ", scenario_label(code)),
-      spec  = DEPENDENCY_SPEC
+    filename <- unname(MAP_CONTINENT_DEPENDANCY_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping manquant pour : ", code)))
+    
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(
+      src = abs_path,
+      contentType = "image/png",
+      width = "100%",
+      alt = paste("Dependancy –", scenario_label(code))
     )
-  })
+  }, deleteFile = FALSE)
   
-  output$continent_emissions_abs_map <- renderPlot({
+  output$continent_emissions_abs_map <- renderImage({
     req(input$continent_scenario_global)
-    req_continent_data()
-    
     code <- SC$code(input$continent_scenario_global)
-    df   <- compute_emissions_abs_map(bdd_clean, code)
     
-    plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("GHG emissions 2050 – ", scenario_label(code)),
-      spec  = EMISSIONS_ABS_SPEC
-    )
-  })
+    filename <- unname(MAP_CONTINENT_EMISSIONS_ABSOLU_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping absolu manquant pour : ", code)))
+    
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(src = abs_path, contentType = "image/png", width = "100%",
+         alt = paste("Emissions (absolute) –", scenario_label(code)))
+  }, deleteFile = FALSE)
   
-  output$continent_emissions_var_map <- renderPlot({
+  output$continent_emissions_var_map <- renderImage({
     req(input$continent_scenario_global)
-    req_continent_data()
-    
     code <- SC$code(input$continent_scenario_global)
-    df   <- compute_emissions_var_map(bdd_clean, code)
     
-    plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("GHG emissions change – ", scenario_label(code)),
-      spec  = EMISSIONS_VAR_SPEC
-    )
-  })
+    filename <- unname(MAP_CONTINENT_EMISSIONS_VARIATION_FILES[code])
+    validate(need(!is.na(filename) && filename != "", paste0("Mapping variation manquant pour : ", code)))
+    
+    abs_path <- file.path("www", "continent", filename)
+    validate(need(file.exists(abs_path), paste0("Image introuvable : ", abs_path)))
+    
+    list(src = abs_path, contentType = "image/png", width = "100%",
+         alt = paste("Emissions (variation) –", scenario_label(code)))
+  }, deleteFile = FALSE)
   
   # =======================
   # ONGLET 11 - ABOUT

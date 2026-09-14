@@ -827,10 +827,10 @@ mod_dependancy_import_food_items_server(
     df   <- compute_landuse_map(bdd_clean, code)
     
     plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("Land use – ", scenario_label(code)),
-      spec  = LANDUSE_SPEC
+      shp          = continent_shp,
+      df           = df,
+      title        = paste0("Land use – ", scenario_label(code)),
+      legend_title = "Land use change\n(2018–2050)"
     )
   })
   
@@ -842,10 +842,10 @@ mod_dependancy_import_food_items_server(
     df   <- compute_dependency_map(bdd_clean, code)
     
     plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("Import dependency – ", scenario_label(code)),
-      spec  = DEPENDENCY_SPEC
+      shp          = continent_shp,
+      df           = df,
+      title        = paste0("Import dependency – ", scenario_label(code)),
+      legend_title = "Change in\nimport dependency"
     )
   })
   
@@ -857,10 +857,10 @@ mod_dependancy_import_food_items_server(
     df   <- compute_emissions_abs_map(bdd_clean, code)
     
     plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("GHG emissions 2050 – ", scenario_label(code)),
-      spec  = EMISSIONS_ABS_SPEC
+      shp          = continent_shp,
+      df           = df,
+      title        = paste0("GHG emissions 2050 – ", scenario_label(code)),
+      legend_title = "GHG emissions\n(MtCO2eq, 2050)"
     )
   })
   
@@ -872,10 +872,10 @@ mod_dependancy_import_food_items_server(
     df   <- compute_emissions_var_map(bdd_clean, code)
     
     plot_continent_choropleth(
-      shp   = continent_shp,
-      df    = df,
-      title = paste0("GHG emissions change – ", scenario_label(code)),
-      spec  = EMISSIONS_VAR_SPEC
+      shp          = continent_shp,
+      df           = df,
+      title        = paste0("GHG emissions change – ", scenario_label(code)),
+      legend_title = "Change in GHG\nemissions (2018–2050)"
     )
   })
   
