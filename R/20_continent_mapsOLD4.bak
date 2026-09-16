@@ -352,7 +352,7 @@ plot_continent_scenarios_grid <- function(shp, bdd, scenarios, compute_fn, spec,
       title = scenario_label(code),
       spec = spec,
       legend_title = NULL,
-      legend_position = "none",
+      legend_position = "bottom",
       xlim = xlim, ylim = ylim
     )
   })

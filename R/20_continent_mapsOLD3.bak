@@ -335,35 +335,8 @@ compute_emissions_var_map <- function(bdd, scenario){
 }
 
 # ============================================================
-# GRILLE 6 SCÉNARIOS (une rubrique, tous les scénarios, légende commune)
+# TRACÉ DE LA CARTE (commun aux 4 rubriques)
 # ============================================================
-# `compute_fn` : une des compute_*_map() ci-dessus.
-# `scenarios`  : vecteur des 6 codes de scénario (ex: r_scenarios_continent()).
-# `spec`       : le spec de légende correspondant (ex: LANDUSE_SPEC).
-# Nécessite le package patchwork (guides="collect" fusionne les légendes
-# identiques des 6 sous-cartes en une seule, positionnée en bas).
-plot_continent_scenarios_grid <- function(shp, bdd, scenarios, compute_fn, spec,
-                                           ncol = 3,
-                                           xlim = c(-20, 55), ylim = c(-36, 38)){
-  plots <- lapply(scenarios, function(code){
-    df <- compute_fn(bdd, code)
-    plot_continent_choropleth(
-      shp = shp, df = df,
-      title = scenario_label(code),
-      spec = spec,
-      legend_title = NULL,
-      legend_position = "none",
-      xlim = xlim, ylim = ylim
-    )
-  })
-  
-  patchwork::wrap_plots(plots, ncol = ncol) +
-    patchwork::plot_layout(guides = "collect") &
-    ggplot2::theme(
-      legend.position = "bottom",
-      plot.title = ggplot2::element_text(size = 11, face = "bold", hjust = 0.5)
-    )
-}
 # `spec` : data.frame avec colonnes code/label/color, dans l'ordre d'affichage
 # voulu pour la légende (cf. DEPENDENCY_SPEC / LANDUSE_SPEC / EMISSIONS_*_SPEC
 # ci-dessus). Le fait d'apparier couleurs et libellés PAR NOM (et non par
@@ -371,7 +344,6 @@ plot_continent_scenarios_grid <- function(shp, bdd, scenarios, compute_fn, spec,
 # atteintes (ex: "jaune" en Land use) ou en présence de NA.
 plot_continent_choropleth <- function(shp, df, title, spec,
                                        legend_title = NULL,
-                                       legend_position = "right",
                                        xlim = c(-20, 55), ylim = c(-36, 38)){
   spec <- rbind(spec, data.frame(code = "Non disponible", label = "Non disponible", color = COL_NA, stringsAsFactors = FALSE))
 
@@ -398,7 +370,7 @@ plot_continent_choropleth <- function(shp, df, title, spec,
     ggplot2::labs(title = title) +
     ggplot2::theme_void(base_size = 13) +
     ggplot2::theme(
-      legend.position = legend_position,
+      legend.position = "right",
       plot.title = ggplot2::element_text(face = "bold", hjust = 0.5)
     )
 }

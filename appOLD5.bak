@@ -7,7 +7,6 @@ library(ggplot2); library(plotly); library(scales)
 library(stringr); library(shinyWidgets); library(DT)
 library(readr); library(tibble)
 library(sf)
-library(patchwork)
 
 # ---- help_type
 ht <- getOption("help_type")
@@ -172,22 +171,10 @@ ui <- tagList(
                   div(
                     class = "col-xs-12 col-sm-4",
                     tags$div(style = "height:10px;"),
-                    
-                    conditionalPanel(
-                      condition = "input.main_tabs !== 'Continent'",
-                      selectInput(
-                        "country_global", "Select a country/region",
-                        choices  = sort(unique(fact$Region)),
-                        selected = default_country
-                      )
-                    ),
-                    conditionalPanel(
-                      condition = "input.main_tabs === 'Continent'",
-                      selectInput(
-                        "continent_mode_global", NULL,
-                        choices  = c("Select a scenario" = "scenario_mode", "Select a theme" = "theme_mode"),
-                        selected = "scenario_mode"
-                      )
+                    selectInput(
+                      "country_global", "Select a country/region",
+                      choices  = sort(unique(fact$Region)),
+                      selected = default_country
                     ),
                     tags$div(style = "height:10px;"),  # petit espace
                     
@@ -377,103 +364,69 @@ ui <- tagList(
         title = "Continent",
         div(class = "container-fluid",
             
-            # ============================================================
-            # MODE "Select a scenario" : 1 scénario, 4 rubriques (comme avant)
-            # ============================================================
-            conditionalPanel(
-              condition = "input.continent_mode_global !== 'theme_mode'",
-              
-              selectInput(
-                inputId = "continent_scenario_global",
-                label   = "Select a scenario",
-                choices = character(0)
-              ),
-              tags$br(),
-              
-              # ================= LAND USE =================
-              h1(class = "section-title", "LAND USE"),
+            # ================= SELECTEUR UNIQUE (LAND USE / DEPENDENCY / EMISSIONS) =================
+            selectInput(
+              inputId = "continent_scenario_global",
+              label   = "Scenario",
+              choices = character(0)
+            ),
+            tags$br(),
+            
+            # ================= LAND USE =================
+            h1(class = "section-title", "LAND USE"),
+            div(
+              class = "u-card continent-map",
+              h4(class = "u-title", "Land use change between Base year (2018) and 2050 "),
               div(
-                class = "u-card continent-map",
-                h4(class = "u-title", "Land use change between Base year (2018) and 2050 "),
-                div(
-                  class = "continent-map-viewport",
-                  plotOutput("continent_landuse_map", width = "100%", height = "500px")
-                )
-              ),
-              
-              tags$hr(class = "rule"),
-              
-              # ================= DEPENDENCY =================
-              h1(class = "section-title", "DEPENDENCY"),
-              div(
-                class = "u-card continent-map",
-                h4(class = "u-title", "Change in import dependency (imports/food + feed + other-uses) in domestic uses between the base year and 2050"),
-                div(
-                  class = "continent-map-viewport",
-                  plotOutput("continent_dependancy_map", width = "100%", height = "500px")
-                )
-              ),
-              
-              tags$hr(class = "rule"),
-              
-              # ================= EMISSIONS =================
-              h1(class = "section-title", "EMISSIONS"),
-              tags$br(),
-              div(
-                class = "u-row",
-                
-                # Gauche : absolu
-                div(
-                  class = "u-box",
-                  div(
-                    class = "u-card continent-map",
-                    h4(class = "u-title", "Annual GHG emissions by country in 2050 (in MtCO2e)"),
-                    div(
-                      class = "continent-map-viewport",
-                      plotOutput("continent_emissions_abs_map", width = "100%", height = "450px")
-                    )
-                  )
-                ),
-                
-                # Droite : variation
-                div(
-                  class = "u-box",
-                  div(
-                    class = "u-card continent-map",
-                    h4(class = "u-title", "Change in annual GHG emissions between Base year (2018) and 2050"),
-                    div(
-                      class = "continent-map-viewport",
-                      plotOutput("continent_emissions_var_map", width = "100%", height = "450px")
-                    )
-                  )
-                )
+                class = "continent-map-viewport",
+                plotOutput("continent_landuse_map", width = "100%", height = "500px")
               )
             ),
             
-            # ============================================================
-            # MODE "Select a theme" : 1 thème, 6 scénarios en grille 3x2
-            # ============================================================
-            conditionalPanel(
-              condition = "input.continent_mode_global === 'theme_mode'",
-              
-              selectInput(
-                inputId = "continent_theme_global",
-                label   = "Select a theme (Land use / Dependency / Emissions absolute / Emissions change)",
-                choices = c(
-                  "Land use"                     = "landuse",
-                  "Dependency"                   = "dependency",
-                  "Emissions (absolute, 2050)"   = "emissions_abs",
-                  "Emissions (change 2018–2050)" = "emissions_var"
-                ),
-                selected = "landuse"
-              ),
-              tags$br(),
+            tags$hr(class = "rule"),
+            
+            # ================= DEPENDENCY =================
+            h1(class = "section-title", "DEPENDENCY"),
+            div(
+              class = "u-card continent-map",
+              h4(class = "u-title", "Change in import dependency (imports/food + feed + other-uses) in domestic uses between the base year and 2050"),
               div(
-                class = "u-card continent-map",
-                uiOutput("continent_theme_title"),
+                class = "continent-map-viewport",
+                plotOutput("continent_dependancy_map", width = "100%", height = "500px")
+              )
+            ),
+            
+            tags$hr(class = "rule"),
+            
+            # ================= EMISSIONS =================
+            h1(class = "section-title", "EMISSIONS"),
+            tags$br(),
+            div(
+              class = "u-row",
+              
+              # Gauche : absolu
+              div(
+                class = "u-box",
                 div(
-                  class = "continent-map-grid-viewport",
-                  plotOutput("continent_theme_grid", width = "100%", height = "900px")
+                  class = "u-card continent-map",
+                  h4(class = "u-title", "Annual GHG emissions by country in 2050 (in MtCO2e)"),
+                  div(
+                    class = "continent-map-viewport",
+                    plotOutput("continent_emissions_abs_map", width = "100%", height = "450px")
+                  )
+                )
+              ),
+              
+              # Droite : variation
+              div(
+                class = "u-box",
+                div(
+                  class = "u-card continent-map",
+                  h4(class = "u-title", "Change in annual GHG emissions between Base year (2018) and 2050"),
+                  div(
+                    class = "continent-map-viewport",
+                    plotOutput("continent_emissions_var_map", width = "100%", height = "450px")
+                  )
                 )
               )
             )
@@ -557,7 +510,7 @@ server <- function(input, output, session){
             paste0(
               "The constraint is not reached so the additional scenario (",
               scenario_label(code),
-              ") is equivalent to the likely diet."
+              ") is equivalent to the likely diet. Therefore, it is not displayed."
             )
           )
         )
@@ -584,40 +537,7 @@ server <- function(input, output, session){
     if (file.exists(file.path("www", rel))) rel else NA_character_
   })
   
-  # Population totale Afrique (utilisée uniquement sur l'onglet Continent) :
-  # somme sur les pays uniques de `fact$Region` (évite le double-comptage des
-  # alias comme "Tanzania" / "United Republic of Tanzania").
-  r_pop2050_africa <- reactive({
-    regions <- unique(fact$Region)
-    sum(unlist(pop2050_dict[regions]), na.rm = TRUE)
-  })
-  r_pop2018_africa <- reactive({
-    regions <- unique(fact$Region)
-    sum(unlist(pop2018_dict[regions]), na.rm = TRUE)
-  })
-  
   output$pop2050_card <- renderUI({
-    
-    if (identical(input$main_tabs, "Continent")) {
-      # --- Vue Afrique (onglet Continent) : pas de drapeau, population totale ---
-      v50 <- r_pop2050_africa(); v18 <- r_pop2018_africa()
-      delta_abs <- if (is.finite(v50) && is.finite(v18)) v50 - v18 else NA_real_
-      delta_pct <- if (is.finite(v50) && is.finite(v18) && v18 > 0) 100 * delta_abs / v18 else NA_real_
-      
-      return(
-        div(class = "kpi-card",
-            div(class = "kpi-head", p(class = "kpi-title", "Projected population in 2050 :")),
-            p(class = "kpi-value", fmt0(v50), tags$span(class = "kpi-unit", "inhabitants")),
-            p(class = "kpi-sub",
-              if (is.na(delta_abs)) "Increase vs 2018 : —"
-              else HTML(paste0("Increase vs 2018 : <b>", fmt0(delta_abs),
-                               " hab.</b> (", fmt1(delta_pct), " %)"))
-            ),
-        )
-      )
-    }
-    
-    # --- Vue par pays (autres onglets) : comportement inchangé, avec drapeau ---
     v50 <- r_pop2050(); v18 <- r_pop2018(); a52 <- r_area_km2()
     delta_abs <- if (is.finite(v50) && is.finite(v18)) v50 - v18 else NA_real_
     delta_pct <- if (is.finite(v50) && is.finite(v18) && v18 > 0) 100 * delta_abs / v18 else NA_real_
@@ -956,42 +876,6 @@ mod_dependancy_import_food_items_server(
       df    = df,
       title = paste0("GHG emissions change – ", scenario_label(code)),
       spec  = EMISSIONS_VAR_SPEC
-    )
-  })
-  
-  # --------- Grille 6 scénarios (2e sélecteur : thème) ---------
-  
-  CONTINENT_THEME_SPECS <- list(
-    landuse       = list(compute_fn = compute_landuse_map,        spec = LANDUSE_SPEC,       title = "LAND USE: change between base year (2018) and 2050"),
-    dependency    = list(compute_fn = compute_dependency_map,     spec = DEPENDENCY_SPEC,    title = "DEPENDENCY: Change in import dependency (imports / domestic uses) between base year (2018) and 2050"),
-    emissions_abs = list(compute_fn = compute_emissions_abs_map,  spec = EMISSIONS_ABS_SPEC, title = "EMISSIONS: Annual GHG emissions by country in 2050 (in MtCO2e)"),
-    emissions_var = list(compute_fn = compute_emissions_var_map,  spec = EMISSIONS_VAR_SPEC, title = "EMISSIONS: Change in annual GHG emissions between base year (2018) and 2050")
-  )
-  
-  output$continent_theme_title <- renderUI({
-    req(input$continent_theme_global)
-    spec <- CONTINENT_THEME_SPECS[[input$continent_theme_global]]
-    req(spec)
-    h4(class = "u-title", spec$title)
-  })
-  
-  output$continent_theme_grid <- renderPlot({
-    req(input$continent_theme_global)
-    req_continent_data()
-    
-    theme_spec <- CONTINENT_THEME_SPECS[[input$continent_theme_global]]
-    req(theme_spec)
-    
-    scenarios <- r_scenarios_continent()
-    req(length(scenarios) > 0)
-    
-    plot_continent_scenarios_grid(
-      shp        = continent_shp,
-      bdd        = bdd_clean,
-      scenarios  = scenarios,
-      compute_fn = theme_spec$compute_fn,
-      spec       = theme_spec$spec,
-      ncol       = 3
     )
   })
   

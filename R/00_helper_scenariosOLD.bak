@@ -166,12 +166,16 @@ scenarios_context_server <- function(
     }, character(1))
   })
 
-  # Effectifs = actifs ∩ présents.
-  # NOTE : les extras "redundant" (identiques à la diète probable) restent
-  # AFFICHÉS — r_extras_status() reste disponible si besoin d'un message
-  # d'info, mais ne filtre plus l'affichage.
+  # Effectifs = actifs ∩ présents, en retirant les extras marqués "redundant"
   r_scenarios_effective <- shiny::reactive({
     wanted  <- r_scenarios_active()
+    status  <- r_extras_status()
+
+    redundant_extras <- names(status)[status == "redundant"]
+    if (length(redundant_extras)) {
+      wanted <- setdiff(wanted, redundant_extras)
+    }
+
     present <- r_present()
     wanted[wanted %in% present]
   })
