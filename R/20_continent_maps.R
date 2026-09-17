@@ -65,11 +65,11 @@ COL_NA         <- "#BDBDBD"
 DEPENDENCY_SPEC <- data.frame(
   code  = c("vert sapin", "vert pâle", "jaune", "orange", "rouge"),
   label = c(
-    "Forte baisse (r < -10 pts)",
-    "Baisse modérée (-10 à -5 pts)",
-    "Stable (-5 à +5 pts)",
-    "Hausse modérée (+5 à +10 pts)",
-    "Forte hausse (r ≥ +10 pts)"
+    "Forte baisse (< -10 pts)",
+    "Baisse modérée (-10 à -3 pts)",
+    "Stable (-3 à +3 pts)",
+    "Hausse modérée (+3 à +10 pts)",
+    "Forte hausse (≥ +10 pts)"
   ),
   color = c(COL_VERT_SAPIN, COL_VERT_CLAIR, COL_JAUNE, COL_ORANGE, COL_ROUGE),
   stringsAsFactors = FALSE
@@ -80,8 +80,8 @@ LANDUSE_SPEC <- data.frame(
   label = c(
     "Agri. diminue, forêt augmente (agri. ≤ 80% du territoire en 2050)",
     "Agri. diminue, forêt augmente (agri. > 80% du territoire en 2050)",
-    "Agri. augmente, perte de forêt > 20%",
-    "Agri. augmente avec perte de forêt ≤ 20%, ou surface agricole > territoire disponible"
+    "Agri. augmente avec perte de forêt ≤ 20%, ou surface agricole > territoire disponible",
+    "Agri. augmente, perte de forêt > 20%"
   ),
   color = c(COL_VERT_SAPIN, COL_VERT_CLAIR, COL_ORANGE, COL_ROUGE),
   stringsAsFactors = FALSE
@@ -223,8 +223,8 @@ compute_dependency_map <- function(bdd, scenario){
       category = dplyr::case_when(
         is.na(r)  ~ NA_character_,
         r < -0.10 ~ "vert sapin",
-        r < -0.05 ~ "vert pâle",
-        r < 0.05  ~ "jaune",
+        r < -0.03 ~ "vert pâle",
+        r < 0.03  ~ "jaune",
         r < 0.10  ~ "orange",
         TRUE      ~ "rouge"
       )
@@ -267,11 +267,11 @@ compute_landuse_map <- function(bdd, scenario){
       agri_share_2050 = dplyr::if_else(total_t > 0, agri_t / total_t, NA_real_),
       category = dplyr::case_when(
         is.na(c_evol) | is.na(f_evol) ~ NA_character_,
-        agri_t > total_t                                    ~ "rouge",
+        agri_t > total_b                                    ~ "rouge",
         c_evol <= 0 & f_evol > 0 & agri_share_2050 <= 0.80 ~ "vert sapin",
         c_evol <= 0 & f_evol > 0 & agri_share_2050 >  0.80 ~ "vert pâle",
-        c_evol >  0 & f_evol <  0 & f_pct >= -0.20          ~ "rouge",
-        c_evol >  0 & f_evol <  0 & f_pct <  -0.20          ~ "orange",
+        c_evol >  0 & f_evol <  0 & f_pct >= -0.20          ~ "orange",
+        c_evol >  0 & f_evol <  0 & f_pct <  -0.20          ~ "rouge",
         TRUE ~ NA_character_
       )
     ) %>%
